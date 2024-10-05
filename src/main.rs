@@ -1,8 +1,6 @@
-use sctp_web_server::modules::sctp_api::sctp_recvmsg_safe;
 
-mod lib;
-
-
+mod modules;
+use modules::sctp_api::sctp_recvmsg_safe;
 fn main() {
 
 }

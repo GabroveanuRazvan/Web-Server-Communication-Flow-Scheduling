@@ -1,8 +1,9 @@
 extern crate libc;
 
 use std::ffi::c_void;
-use libc::{c_int, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t,listen};
+use libc::{c_int, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t,listen,socket,AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP,__errno_location};
 use std::ptr;
+use std::io::{Result, Error};
 
 
 
@@ -30,7 +31,7 @@ pub fn sctp_recvmsg_safe(
     sender_info: Option<&mut sctp_sndrcvinfo>,
     msg_flags: &mut i32
 
-) -> Result<i32,i32>{
+) -> Result<i32>{
 
     let message_size = msg.len() as size_t;
 
@@ -68,12 +69,7 @@ pub fn sctp_recvmsg_safe(
     };
 
     // return Ok or Err based on the output
-    if result >= 0 {
-        Ok(result)
-    }
-    else{
-        Err(result)
-    }
+    wrap_result(result)
 }
 
 pub fn sctp_sendmsg_safe(
@@ -86,7 +82,7 @@ pub fn sctp_sendmsg_safe(
     time_to_live: u32,
     context: u32
 
-) -> Result<i32,i32> {
+) -> Result<i32> {
 
     // get the sizes of message and address
     let message_size = msg.len() as size_t;
@@ -110,24 +106,88 @@ pub fn sctp_sendmsg_safe(
     };
 
     // return Ok or Err based on the output
-    if result >= 0{
-        Ok(result)
-    }
-    else{
-        Err(result)
-    }
+    wrap_result(result)
 }
 
-fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32,i32>{
+pub fn safe_sctp_bindx(socket_fd: i32,addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
+    let address_count = addrs.len() as i32;
+    let addrs_ptr = addrs.as_mut_ptr();
+
+    let result = unsafe{
+        sctp_bindx(socket_fd,addrs_ptr,address_count,flags)
+    };
+
+    wrap_result(result)
+
+}
+
+pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
+    let address_count = addrs.len() as i32;
+    let addrs_ptr = addrs.as_mut_ptr();
+
+    let result = unsafe{
+        sctp_connectx(socket_fd,addrs_ptr,address_count,flags)
+    };
+
+    wrap_result(result)
+
+}
+
+/// sctp_peeloff wrapper
+pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
+
+    let result = unsafe{
+        sctp_peeloff(socket_fd,assoc_id)
+    };
+
+    wrap_result(result)
+
+}
+
+/// creates a ipv4 sctp socket with delimited packets
+pub fn safe_sctp_socket() -> Result<i32>{
+
+    let result = unsafe{
+        socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP)
+    };
+
+    wrap_result(result)
+
+
+}
+
+/// wrapper for listen
+pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32>{
 
     let result = unsafe{
         listen(socket_fd, max_queue_size)
     };
 
-    if result >=0 {
+    wrap_result(result)
+
+}
+
+/// Function that extracts errno safely
+pub fn get_errno() -> i32{
+
+    let mut errno = 0;
+
+    unsafe{
+        errno = *__errno_location();
+    }
+
+    errno
+
+}
+
+/// wrapper function for nonnegative values
+pub fn wrap_result(result: i32) -> Result<i32>{
+
+    if result > 0{
         Ok(result)
-    }else{
-        Err(result)
+    }
+    else{
+        Err(Error::from_raw_os_error(get_errno()))
     }
 
 }
