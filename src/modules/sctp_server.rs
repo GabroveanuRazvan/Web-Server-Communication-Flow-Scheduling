@@ -4,7 +4,7 @@ use crate::modules::sctp_api::safe_sctp_socket;
 #[derive(Debug)]
 pub struct SctpServer {
     sock_fd: i32,
-    address: Ipv4Addr,
+    addresses: Vec<Ipv4Addr>,
     port: u16,
 }
 
@@ -15,22 +15,22 @@ impl SctpServer{
 
 pub struct SctpServerBuilder{
     sock_fd: i32,
-    address: Ipv4Addr,
+    addresses: Vec<Ipv4Addr>,
     port: u16,
 }
 
 impl SctpServerBuilder{
 
     pub fn new() -> Self{
+
         Self{
             sock_fd: 0,
-            address: Ipv4Addr::new(127,0,0,1),
+            addresses: vec![],
             port: 8080,
         }
     }
 
     pub fn descriptor(mut self) -> Self{
-
 
         let result = safe_sctp_socket();
 
@@ -43,7 +43,12 @@ impl SctpServerBuilder{
     }
 
     pub fn address(mut self,address: Ipv4Addr) -> Self{
-        self.address = address;
+        self.addresses.push(address);
+        self
+    }
+
+    pub fn addresses(mut self, mut addresses: Vec<Ipv4Addr>) -> Self{
+        self.addresses.append(&mut addresses);
         self
     }
 
@@ -55,7 +60,7 @@ impl SctpServerBuilder{
     pub fn build(self) -> SctpServer{
         SctpServer{
             sock_fd: self.sock_fd,
-            address: self.address,
+            addresses: self.addresses,
             port: self.port,
         }
     }

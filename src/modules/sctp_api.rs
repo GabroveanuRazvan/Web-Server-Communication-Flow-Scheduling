@@ -116,7 +116,7 @@ pub fn sctp_sendmsg_safe(
     wrap_result(result)
 }
 
-pub fn safe_sctp_bindx(socket_fd: i32,addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
+pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
     let address_count = addrs.len() as i32;
     let addrs_ptr = addrs.as_mut_ptr();
 

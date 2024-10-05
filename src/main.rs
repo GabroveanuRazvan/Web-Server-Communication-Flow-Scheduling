@@ -8,7 +8,7 @@ fn main() {
 
     let s = SctpServerBuilder::new()
         .descriptor()
-        .address(Ipv4Addr::new(127, 0, 0, 1))
+        .addresses(vec![Ipv4Addr::new(127, 0, 0, 1),Ipv4Addr::new(127,0,0,128)])
         .port(7878)
         .build();
 
