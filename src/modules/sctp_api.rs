@@ -1,10 +1,17 @@
 extern crate libc;
 
 use std::ffi::c_void;
-use libc::{c_int, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t,listen,socket,AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP,__errno_location};
+use libc::{
+    c_int, size_t, sockaddr_in,
+    socklen_t, sctp_sndrcvinfo,
+    sctp_assoc_t,socket,
+    AF_INET,
+    SOCK_SEQPACKET,
+    IPPROTO_SCTP,
+};
 use std::ptr;
-use std::io::{Result, Error};
-
+use std::io::{Result};
+use super::libc_wrappers::wrap_result;
 
 
 #[link(name = "sctp")]
@@ -153,41 +160,5 @@ pub fn safe_sctp_socket() -> Result<i32>{
 
     wrap_result(result)
 
-
 }
 
-/// wrapper for listen
-pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32>{
-
-    let result = unsafe{
-        listen(socket_fd, max_queue_size)
-    };
-
-    wrap_result(result)
-
-}
-
-/// Function that extracts errno safely
-pub fn get_errno() -> i32{
-
-    let mut errno = 0;
-
-    unsafe{
-        errno = *__errno_location();
-    }
-
-    errno
-
-}
-
-/// wrapper function for nonnegative values
-pub fn wrap_result(result: i32) -> Result<i32>{
-
-    if result > 0{
-        Ok(result)
-    }
-    else{
-        Err(Error::from_raw_os_error(get_errno()))
-    }
-
-}
