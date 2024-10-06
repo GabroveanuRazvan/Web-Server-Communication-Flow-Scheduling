@@ -9,9 +9,11 @@ use libc::{
     SOCK_SEQPACKET,
     IPPROTO_SCTP,
 };
+
 use std::ptr;
 use std::io::{Result};
 use super::libc_wrappers::{wrap_result_nonnegative,SockAddrIn};
+
 
 /// Macros used in sctp_bindx function
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
@@ -33,7 +35,7 @@ extern "C"{
 }
 
 
-pub fn sctp_recvmsg_safe(
+pub fn safe_sctp_recvmsg(
 
     sock_fd: i32,
     msg: &mut [u8],
@@ -45,7 +47,7 @@ pub fn sctp_recvmsg_safe(
 
     let message_size = msg.len() as size_t;
 
-    // get a tuple of pointers to the socket addres and its length or null pointers if they are not specified
+    // get a tuple of pointers to the socket address and its length or null pointers if they are not specified
     let from_address_data = if let Some(address) = from_address{
 
         let mut address_length = size_of::<SockAddrIn>() as socklen_t;
@@ -82,7 +84,7 @@ pub fn sctp_recvmsg_safe(
     wrap_result_nonnegative(result)
 }
 
-pub fn sctp_sendmsg_safe(
+pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
     to_address: &mut SockAddrIn,
@@ -143,7 +145,7 @@ pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn], flags: i32) -
 
 }
 
-/// sctp_peeloff wrapper
+/// Wrapper for sctp_peeloff, returns Ok(0) or Err(io::Error) on failure
 pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 
     let result = unsafe{
@@ -154,7 +156,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 
 }
 
-/// creates a ipv4 sctp socket with delimited packets
+/// Creates an ipv4 sctp socket with delimited packets, returns Ok(socket_descriptor) or Err(io::Error) on failure
 pub fn safe_sctp_socket() -> Result<i32>{
 
     let result = unsafe{

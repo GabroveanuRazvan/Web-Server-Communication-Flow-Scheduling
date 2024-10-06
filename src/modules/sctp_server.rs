@@ -1,6 +1,6 @@
 use std::mem;
 use std::net::{Ipv4Addr};
-use libc::{sockaddr_in, AF_INET,close};
+use libc::{AF_INET,close};
 use super::sctp_api::{safe_sctp_socket,safe_sctp_bindx,SCTP_BINDX_ADD_ADDR};
 use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen};
 
@@ -45,6 +45,7 @@ impl SctpServer{
 
     }
 
+    /// Puts the server on passive mode
     pub fn listen(&self) -> &Self{
 
         if let Err(error) = safe_listen(self.sock_fd,self.max_connections as i32){
@@ -53,6 +54,10 @@ impl SctpServer{
 
         self
 
+    }
+
+    pub fn receive_message(&self) -> &Self{
+        self
     }
 }
 

@@ -4,7 +4,7 @@ use std::io::Error;
 use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET};
 use std::io::Result;
 
-/// used for naming conventions
+/// Used for naming conventions
 
 pub type SockAddrIn = sockaddr_in;
 
@@ -12,7 +12,7 @@ extern "C"{
     fn inet_pton(af: c_int,src: *const c_char,dst: *mut c_void) -> c_int;
 }
 
-/// wrapper for listen
+/// Wrapper for listen, returns Ok(0) or Err(io::Error) on failure
 pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32> {
 
     let result = unsafe{
@@ -23,7 +23,7 @@ pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32> {
 
 }
 
-/// wrapper for AF_INET inet_pton
+/// Wrapper for AF_INET inet_pton, returns Ok(0) or Err(io::Error) on failure
 pub fn safe_inet_pton(ip: String, to: &mut u32) -> Result<i32>{
 
     let ip_as_cstring = CString::new(ip).unwrap();
@@ -48,7 +48,7 @@ pub fn get_errno() -> i32{
 
 }
 
-/// wrapper function for nonnegative values
+/// Wrapper function for nonnegative values
 pub fn wrap_result_nonnegative(result: i32) -> Result<i32> {
 
     if result >= 0{
@@ -60,7 +60,7 @@ pub fn wrap_result_nonnegative(result: i32) -> Result<i32> {
 
 }
 
-/// wrapper function for positive values
+/// Wrapper function for positive values
 pub fn wrap_result_positive(result: i32) -> Result<i32> {
 
     if result > 0{
