@@ -11,8 +11,11 @@ use libc::{
 };
 use std::ptr;
 use std::io::{Result};
-use super::libc_wrappers::wrap_result;
+use super::libc_wrappers::{wrap_result_nonnegative,SockAddrIn};
 
+/// Macros used in sctp_bindx function
+pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
+pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 
 #[link(name = "sctp")]
 extern "C"{
@@ -34,7 +37,7 @@ pub fn sctp_recvmsg_safe(
 
     sock_fd: i32,
     msg: &mut [u8],
-    from_address: Option<&mut sockaddr_in>,
+    from_address: Option<&mut SockAddrIn>,
     sender_info: Option<&mut sctp_sndrcvinfo>,
     msg_flags: &mut i32
 
@@ -45,9 +48,9 @@ pub fn sctp_recvmsg_safe(
     // get a tuple of pointers to the socket addres and its length or null pointers if they are not specified
     let from_address_data = if let Some(address) = from_address{
 
-        let mut address_length = size_of::<sockaddr_in>() as socklen_t;
+        let mut address_length = size_of::<SockAddrIn>() as socklen_t;
 
-        (address as *mut sockaddr_in,address_length as *mut socklen_t)
+        (address as *mut SockAddrIn,address_length as *mut socklen_t)
     }
     else{
         (ptr::null_mut(),ptr::null_mut())
@@ -76,13 +79,13 @@ pub fn sctp_recvmsg_safe(
     };
 
     // return Ok or Err based on the output
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 }
 
 pub fn sctp_sendmsg_safe(
     sock_fd: i32,
     msg: &[u8],
-    to_address: &mut sockaddr_in,
+    to_address: &mut SockAddrIn,
     payload_protocol_id: u32,
     flags: u32,
     stream_number: u16,
@@ -93,7 +96,7 @@ pub fn sctp_sendmsg_safe(
 
     // get the sizes of message and address
     let message_size = msg.len() as size_t;
-    let address_size = size_of::<sockaddr_in>() as socklen_t;
+    let address_size = size_of::<SockAddrIn>() as socklen_t;
 
     // call the unsafe FFI
     let result = unsafe{
@@ -113,22 +116,22 @@ pub fn sctp_sendmsg_safe(
     };
 
     // return Ok or Err based on the output
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 }
 
-pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
+pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [SockAddrIn], flags: i32) -> Result<i32>{
     let address_count = addrs.len() as i32;
-    let addrs_ptr = addrs.as_mut_ptr();
+    let addrs_ptr = addrs.as_mut_ptr() as *mut sockaddr_in;
 
     let result = unsafe{
         sctp_bindx(socket_fd,addrs_ptr,address_count,flags)
     };
 
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 
 }
 
-pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [sockaddr_in], flags: i32) -> Result<i32>{
+pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn], flags: i32) -> Result<i32>{
     let address_count = addrs.len() as i32;
     let addrs_ptr = addrs.as_mut_ptr();
 
@@ -136,7 +139,7 @@ pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [sockaddr_in], flags: i32) 
         sctp_connectx(socket_fd,addrs_ptr,address_count,flags)
     };
 
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 
 }
 
@@ -147,7 +150,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
         sctp_peeloff(socket_fd,assoc_id)
     };
 
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 
 }
 
@@ -158,7 +161,7 @@ pub fn safe_sctp_socket() -> Result<i32>{
         socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP)
     };
 
-    wrap_result(result)
+    wrap_result_nonnegative(result)
 
 }
 
