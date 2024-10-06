@@ -2,13 +2,14 @@ use std::mem;
 use std::net::{Ipv4Addr};
 use libc::{sockaddr_in, AF_INET,close};
 use super::sctp_api::{safe_sctp_socket,safe_sctp_bindx,SCTP_BINDX_ADD_ADDR};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen};
 
 #[derive(Debug)]
 pub struct SctpServer {
     sock_fd: i32,
     addresses: Vec<Ipv4Addr>,
     port: u16,
+    max_connections: u16,
 }
 
 /// Abstract implementation of a sctp server
@@ -27,7 +28,7 @@ impl SctpServer{
 
             // strange bug: if inet_pton is called after the initialization of family and port s_addr will be 0 no matter the ip given
             if let Err(error) = safe_inet_pton(address.to_string(),&mut current_socket_address.sin_addr.s_addr) {
-                panic!("Inet pton error: {error}");
+                panic!("Inet_pton error: {error}");
             }
 
             debug_sockaddr(&current_socket_address);
@@ -39,6 +40,16 @@ impl SctpServer{
         if let Err(error) = safe_sctp_bindx(self.sock_fd,&mut socket_addresses,SCTP_BINDX_ADD_ADDR){
             panic!("SCTP bindx error: {error}");
         }
+
+        self
+
+    }
+
+    pub fn listen(&self) -> &Self{
+
+        if let Err(error) = safe_listen(self.sock_fd,self.max_connections as i32){
+            panic!("SCTP Listen error: {error}");
+        };
 
         self
 
@@ -61,6 +72,7 @@ pub struct SctpServerBuilder{
     sock_fd: i32,
     addresses: Vec<Ipv4Addr>,
     port: u16,
+    max_connections: u16,
 }
 
 impl SctpServerBuilder{
@@ -72,6 +84,7 @@ impl SctpServerBuilder{
             sock_fd: 0,
             addresses: vec![],
             port: 8080,
+            max_connections: 0,
         }
     }
 
@@ -108,6 +121,12 @@ impl SctpServerBuilder{
         self
     }
 
+    /// Sets the maximum connections that the server can handle
+    pub fn max_connections(mut self,max_connections: u16) -> Self{
+        self.max_connections = max_connections;
+        self
+    }
+
     /// Builds the server based on the given information
     pub fn build(self) -> SctpServer{
 
@@ -115,6 +134,7 @@ impl SctpServerBuilder{
             sock_fd: self.sock_fd,
             addresses: self.addresses,
             port: self.port,
+            max_connections: self.max_connections,
         }
     }
 

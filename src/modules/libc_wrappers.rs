@@ -72,6 +72,7 @@ pub fn wrap_result_positive(result: i32) -> Result<i32> {
 
 }
 
+/// Debugging function
 pub fn debug_sockaddr(sockaddr: &SockAddrIn){
     println!("Sockaddr(family:{}, port:{}, address: {})",sockaddr.sin_family,sockaddr.sin_port.to_be(),sockaddr.sin_addr.s_addr);
 }
