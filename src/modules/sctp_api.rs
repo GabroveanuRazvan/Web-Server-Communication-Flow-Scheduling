@@ -1,14 +1,7 @@
 extern crate libc;
 
 use std::ffi::c_void;
-use libc::{
-    c_int, size_t, sockaddr_in,
-    socklen_t, sctp_sndrcvinfo,
-    sctp_assoc_t,socket,
-    AF_INET,
-    SOCK_SEQPACKET,
-    IPPROTO_SCTP,
-};
+use libc::{c_int, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM};
 
 use std::ptr;
 use std::io::{Result};
@@ -52,7 +45,7 @@ pub fn safe_sctp_recvmsg(
 
         let mut address_length = size_of::<SockAddrIn>() as socklen_t;
 
-        (address as *mut SockAddrIn,address_length as *mut socklen_t)
+        (address as *mut SockAddrIn,&mut address_length as *mut socklen_t)
     }
     else{
         (ptr::null_mut(),ptr::null_mut())

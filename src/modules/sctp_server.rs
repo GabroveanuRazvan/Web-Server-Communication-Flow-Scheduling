@@ -1,8 +1,9 @@
+use std::io::{Read,Result};
 use std::mem;
 use std::net::{Ipv4Addr};
 use libc::{AF_INET,close};
-use super::sctp_api::{safe_sctp_socket,safe_sctp_bindx,SCTP_BINDX_ADD_ADDR};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen};
+use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo};
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -56,8 +57,18 @@ impl SctpServer{
 
     }
 
-    pub fn receive_message(&self) -> &Self{
-        self
+    /// Method used to read data from the socket, stores the client address and info
+    pub fn read(&mut self,buf: &mut [u8],
+                client_address: Option<&mut SockAddrIn>,
+                sender_info: Option<&mut SctpSenderInfo>,
+                flags: i32) ->Result<usize>{
+
+        let mut flags = 0;
+
+        match safe_sctp_recvmsg(self.sock_fd,buf,client_address,sender_info,&mut flags){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
     }
 }
 
