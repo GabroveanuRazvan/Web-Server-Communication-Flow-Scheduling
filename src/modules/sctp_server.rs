@@ -1,9 +1,9 @@
 use std::io::{Read,Result};
 use std::mem;
 use std::net::{Ipv4Addr};
-use libc::{AF_INET,close};
-use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo};
+use libc::{AF_INET,close,IPPROTO_SCTP,SCTP_EVENTS};
+use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt};
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -11,6 +11,7 @@ pub struct SctpServer {
     addresses: Vec<Ipv4Addr>,
     port: u16,
     max_connections: u16,
+    active_events: SctpEventSubscribe,
 }
 
 /// Abstract implementation of a sctp server
@@ -58,17 +59,39 @@ impl SctpServer{
     }
 
     /// Method used to read data from the socket, stores the client address and info
-    pub fn read(&mut self,buf: &mut [u8],
+    pub fn read(&mut self, buffer: &mut [u8],
                 client_address: Option<&mut SockAddrIn>,
                 sender_info: Option<&mut SctpSenderInfo>,
                 flags: i32) ->Result<usize>{
 
         let mut flags = 0;
 
-        match safe_sctp_recvmsg(self.sock_fd,buf,client_address,sender_info,&mut flags){
+        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, &mut flags){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
+    }
+
+    /// Method used to write data to a peer using a designated stream
+    pub fn write(&mut self,buffer: &mut [u8],to_address: &mut SockAddrIn, stream_number: u16, flags: u32, ttl: u32) -> Result<usize>{
+
+        match safe_sctp_sendmsg(self.sock_fd,buffer,to_address,0,flags,stream_number,ttl,0){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
+
+    }
+
+    /// Method used to activate the event options of the server
+    pub fn options(&self) ->&Self{
+
+        let events_ref = events_to_u8(&self.active_events);
+
+        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_ref){
+            panic!("SCTP setsockopt error: {error}");
+        }
+
+        self
     }
 }
 
@@ -89,6 +112,7 @@ pub struct SctpServerBuilder{
     addresses: Vec<Ipv4Addr>,
     port: u16,
     max_connections: u16,
+    active_events: SctpEventSubscribe,
 }
 
 impl SctpServerBuilder{
@@ -101,6 +125,7 @@ impl SctpServerBuilder{
             addresses: vec![],
             port: 8080,
             max_connections: 0,
+            active_events: SctpEventSubscribe::new(),
         }
     }
 
@@ -143,6 +168,12 @@ impl SctpServerBuilder{
         self
     }
 
+    /// Sets the events that the server will be subscribed to
+    pub fn events(mut self, events: SctpEventSubscribe) -> Self{
+        self.active_events = events;
+        self
+    }
+
     /// Builds the server based on the given information
     pub fn build(self) -> SctpServer{
 
@@ -151,6 +182,7 @@ impl SctpServerBuilder{
             addresses: self.addresses,
             port: self.port,
             max_connections: self.max_connections,
+            active_events: self.active_events,
         }
     }
 

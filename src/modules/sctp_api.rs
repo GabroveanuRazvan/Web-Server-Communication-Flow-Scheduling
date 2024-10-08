@@ -1,17 +1,66 @@
 extern crate libc;
 
-use std::ffi::c_void;
-use libc::{c_int, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM};
+use libc::{c_int,c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM};
 
-use std::ptr;
+use std::{ptr, slice};
 use std::io::{Result};
-use super::libc_wrappers::{wrap_result_nonnegative,SockAddrIn};
+use super::libc_wrappers::{debug_sctp_sndrcvinfo, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
 
 
 /// Macros used in sctp_bindx function
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
 pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 
+///
+/// Custom structs
+///
+
+
+/// Same SctpEventSubscribe as in the C API
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct SctpEventSubscribe {
+    pub sctp_data_io_event: u8,
+    pub sctp_association_event: u8,
+    pub sctp_address_event: u8,
+    pub sctp_send_failure_event: u8,
+    pub sctp_peer_error_event: u8,
+    pub sctp_shutdown_event: u8,
+    pub sctp_partial_delivery_event: u8,
+    pub sctp_adaptation_layer_event: u8,
+    pub sctp_authentication_event: u8,
+    pub sctp_sender_dry_event: u8,
+    pub sctp_stream_reset_event: u8,
+    pub sctp_assoc_reset_event: u8,
+    pub sctp_stream_change_event: u8,
+    pub sctp_send_failure_event_event: u8,
+}
+
+
+impl SctpEventSubscribe{
+    /// Method used to quickly initialize a raw object without using mem::zeroed
+    pub fn new() -> SctpEventSubscribe {
+        SctpEventSubscribe{
+            sctp_data_io_event: 0,
+            sctp_association_event: 0,
+            sctp_address_event: 0,
+            sctp_send_failure_event: 0,
+            sctp_peer_error_event: 0,
+            sctp_shutdown_event: 0,
+            sctp_partial_delivery_event: 0,
+            sctp_adaptation_layer_event: 0,
+            sctp_authentication_event: 0,
+            sctp_sender_dry_event: 0,
+            sctp_stream_reset_event: 0,
+            sctp_assoc_reset_event: 0,
+            sctp_stream_change_event: 0,
+            sctp_send_failure_event_event: 0,
+        }
+    }
+}
+
+
+/// FFI binding of sctp functions that the libc crate does not provide
 #[link(name = "sctp")]
 extern "C"{
     fn sctp_recvmsg(sd: c_int, msg: *mut c_void, len: size_t, from: *mut sockaddr_in, fromlen: *mut socklen_t, sri: *mut sctp_sndrcvinfo, msg_flags: *mut c_int) -> c_int;
@@ -28,6 +77,7 @@ extern "C"{
 }
 
 
+/// Wrapper for sctp_recv function
 pub fn safe_sctp_recvmsg(
 
     sock_fd: i32,
@@ -77,6 +127,7 @@ pub fn safe_sctp_recvmsg(
     wrap_result_nonnegative(result)
 }
 
+/// Wrapper function for sctp_sendmsg
 pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
@@ -114,6 +165,7 @@ pub fn safe_sctp_sendmsg(
     wrap_result_nonnegative(result)
 }
 
+/// Wrapper function for sctp_bindx function
 pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [SockAddrIn], flags: i32) -> Result<i32>{
     let address_count = addrs.len() as i32;
     let addrs_ptr = addrs.as_mut_ptr() as *mut sockaddr_in;
@@ -126,6 +178,7 @@ pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [SockAddrIn], flags: i32) -> 
 
 }
 
+/// Wrapper function for sctp_connextx function
 pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn], flags: i32) -> Result<i32>{
     let address_count = addrs.len() as i32;
     let addrs_ptr = addrs.as_mut_ptr();
@@ -160,3 +213,17 @@ pub fn safe_sctp_socket() -> Result<i32>{
 
 }
 
+
+///
+/// Custom structs related functions
+///
+
+
+/// Function that takes the address of the struct SctpEventSubscribe and turns the address into &[u8]
+pub fn events_to_u8(events: &SctpEventSubscribe) -> &[u8]{
+
+    let ptr = events as *const SctpEventSubscribe as *const u8;
+    let size = size_of::<SctpEventSubscribe>();
+
+    unsafe{slice::from_raw_parts(ptr, size)}
+}

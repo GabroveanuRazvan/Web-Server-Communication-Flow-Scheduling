@@ -1,7 +1,7 @@
 use std::ffi::CString;
-use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo};
+use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo,setsockopt};
 use std::io::Result;
 use std::net::Ipv4Addr;
 
@@ -9,26 +9,9 @@ use std::net::Ipv4Addr;
 
 pub type SockAddrIn = sockaddr_in;
 pub type SctpSenderInfo = sctp_sndrcvinfo;
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct SctpEventSubscribe {
-    pub sctp_data_io_event: u8,
-    pub sctp_association_event: u8,
-    pub sctp_address_event: u8,
-    pub sctp_send_failure_event: u8,
-    pub sctp_peer_error_event: u8,
-    pub sctp_shutdown_event: u8,
-    pub sctp_partial_delivery_event: u8,
-    pub sctp_adaptation_layer_event: u8,
-    pub sctp_authentication_event: u8,
-    pub sctp_sender_dry_event: u8,
-    pub sctp_stream_reset_event: u8,
-    pub sctp_assoc_reset_event: u8,
-    pub sctp_stream_change_event: u8,
-    pub sctp_send_failure_event_event: u8,
-}
 
 
+/// FFI bindings for functions that the libc crate does not provide
 extern "C"{
     fn inet_pton(af: c_int,src: *const c_char,dst: *mut c_void) -> c_int;
 }
@@ -54,6 +37,19 @@ pub fn safe_inet_pton(ip: String, to: &mut u32) -> Result<i32>{
     };
 
     wrap_result_positive(result)
+}
+
+/// Wrapper function used to set the socket options
+pub fn safe_setsockopt(socket: i32, level:i32, option_name:i32, option_value:&[u8]) -> Result<i32>{
+
+    let option_length = option_value.len() as u32;
+
+    let result = unsafe{
+        setsockopt(socket,level,option_name,option_value.as_ptr() as *const c_void,option_length)
+    };
+
+    wrap_result_nonnegative(result)
+
 }
 
 /// Function that extracts errno safely
