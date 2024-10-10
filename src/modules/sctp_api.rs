@@ -88,7 +88,8 @@ pub fn safe_sctp_recvmsg(
 
 ) -> Result<i32>{
 
-    let message_size = msg.len() as size_t;
+    // read with one less character so that we are assured that there will pe a null character in the end
+    let message_size = msg.len()-1 as size_t;
 
     // get a tuple of pointers to the socket address and its length or null pointers if they are not specified
     let from_address_data = if let Some(address) = from_address{
@@ -127,6 +128,7 @@ pub fn safe_sctp_recvmsg(
 pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
+    msg_size: isize,
     to_address: &mut SockAddrIn,
     payload_protocol_id: u32,
     flags: u32,
@@ -137,7 +139,7 @@ pub fn safe_sctp_sendmsg(
 ) -> Result<i32> {
 
     // get the sizes of message and address
-    let message_size = msg.len() as size_t;
+    let message_size = msg_size as size_t;
     let address_size = size_of::<SockAddrIn>() as socklen_t;
 
     // call the unsafe FFI
@@ -202,7 +204,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 pub fn safe_sctp_socket() -> Result<i32>{
 
     let result = unsafe{
-        socket(AF_INET,SOCK_DGRAM,IPPROTO_SCTP)
+        socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP)
     };
 
     wrap_result_nonnegative(result)

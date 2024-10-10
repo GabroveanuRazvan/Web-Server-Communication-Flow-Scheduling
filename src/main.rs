@@ -25,7 +25,7 @@ fn main() {
     events.sctp_data_io_event = 1;
 
     let mut server = SctpServerBuilder::new()
-        .descriptor()
+        .socket()
         .address(IPV4)
         .port(PORT)
         .max_connections(MAX_CONNECTIONS)
@@ -47,8 +47,9 @@ fn main() {
 
     loop{
 
-        let read_bytes = server.read(&mut buffer,Some(&mut client_address),Some(&mut sender_info),&mut flags).unwrap();
-        println!("Read {read_bytes} bytes");
+        let bytes_read = server.read(&mut buffer,Some(&mut client_address),Some(&mut sender_info),&mut flags).unwrap();
+        println!("Read {bytes_read} bytes");
+
 
         // if let Err(error) = server.accept(Some(&mut client_address)){
         //     panic!("Failed to accept client: {}", error);
@@ -58,7 +59,7 @@ fn main() {
         debug_sctp_sndrcvinfo(&sender_info);
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
-        match server.write(&mut buffer,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+        match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
             Ok(bytes) => println!("Wrote {bytes}"),
             Err(e) => println!("Write Error: {:?}",e)
         }

@@ -62,18 +62,18 @@ impl SctpServer{
     pub fn read(&mut self, buffer: &mut [u8],
                 client_address: Option<&mut SockAddrIn>,
                 sender_info: Option<&mut SctpSenderInfo>,
-                flags: &mut i32) ->Result<usize>{
+                flags: &mut i32) ->Result<isize>{
 
         match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, flags){
-            Ok(size) => Ok(size as usize),
+            Ok(size) => Ok(size as isize),
             Err(error) => Err(error),
         }
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self, buffer: &mut [u8], to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+    pub fn write(&mut self, buffer: &mut [u8], num_bytes: isize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
 
-        match safe_sctp_sendmsg(self.sock_fd,buffer,to_address,0,flags as u32,stream_number,ttl,0){
+        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,to_address,0,flags as u32,stream_number,ttl,0){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
@@ -141,7 +141,7 @@ impl SctpServerBuilder{
     }
 
     /// Creates a new sctp socket with delimited packets and stores its file descriptor
-    pub fn descriptor(mut self) -> Self{
+    pub fn socket(mut self) -> Self{
 
         let result = safe_sctp_socket();
 
