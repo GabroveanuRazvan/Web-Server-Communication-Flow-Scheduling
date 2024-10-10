@@ -1,10 +1,10 @@
 extern crate libc;
 
-use libc::{c_int,c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM};
+use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM, SOCK_DGRAM};
 
 use std::{ptr, slice};
 use std::io::{Result};
-use super::libc_wrappers::{debug_sctp_sndrcvinfo, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
+use super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
 
 
 /// Macros used in sctp_bindx function
@@ -102,12 +102,8 @@ pub fn safe_sctp_recvmsg(
     };
 
     // get the sender info if it was specified
-    let sender_info_data = if let Some(info) = sender_info{
-        info as *mut sctp_sndrcvinfo
-    }
-    else{
-        ptr::null_mut()
-    };
+
+    let sender_info_data = get_ptr_from_mut_ref(sender_info);
 
     // call the unsafe FFI
     let result = unsafe{
@@ -206,7 +202,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 pub fn safe_sctp_socket() -> Result<i32>{
 
     let result = unsafe{
-        socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP)
+        socket(AF_INET,SOCK_DGRAM,IPPROTO_SCTP)
     };
 
     wrap_result_nonnegative(result)

@@ -1,15 +1,15 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo,setsockopt};
+use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr,socklen_t};
 use std::io::Result;
 use std::net::Ipv4Addr;
+use std::ptr;
 
 /// Aliases and structures that are not in libc
 
 pub type SockAddrIn = sockaddr_in;
 pub type SctpSenderInfo = sctp_sndrcvinfo;
-
 
 /// FFI bindings for functions that the libc crate does not provide
 extern "C"{
@@ -27,7 +27,26 @@ pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32> {
 
 }
 
-/// Wrapper for AF_INET inet_pton, returns Ok(0) or Err(io::Error) on failure
+/// Wrapper for accept, returns Ok(0) or Err(io::Error) on failure
+pub fn safe_accept(socket_fd: i32, address: Option<&mut SockAddrIn>, address_size: Option<&mut usize>) -> Result<i32>{
+
+
+    let addr_ptr = get_ptr_from_mut_ref(address);
+    let addr_size_ptr = get_ptr_from_mut_ref(address_size);
+
+    let result = unsafe{
+        accept(
+            socket_fd,
+            addr_ptr as *mut SockAddrIn as *mut sockaddr,
+            addr_size_ptr as *mut socklen_t,
+        )
+    };
+
+    wrap_result_nonnegative(result)
+
+}
+
+/// Wrapper for AF_INET inet_pton, returns Ok or Err(io::Error) on failure
 pub fn safe_inet_pton(ip: String, to: &mut u32) -> Result<i32>{
 
     let ip_as_cstring = CString::new(ip).unwrap();
@@ -87,6 +106,28 @@ pub fn wrap_result_positive(result: i32) -> Result<i32> {
         Err(Error::from_raw_os_error(get_errno()))
     }
 
+}
+
+/// Unwraps the option and returns a null pointer if None or a const pointer to type T otherwise
+pub fn get_ptr_from_ref<T>(reference: Option<&T>) -> *const T{
+
+    if let Some(address) = reference{
+        address as *const T
+    }
+    else{
+        ptr::null()
+    }
+}
+
+/// Unwraps the option and returns a null pointer if None or a mutable pointer to type T otherwise
+pub fn get_ptr_from_mut_ref<T>(reference: Option<&mut T>) -> *mut T{
+
+    if let Some(address) = reference{
+        address as *mut T
+    }
+    else{
+        ptr::null_mut()
+    }
 }
 
 /// Debugging functions

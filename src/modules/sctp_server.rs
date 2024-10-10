@@ -3,7 +3,7 @@ use std::mem;
 use std::net::{Ipv4Addr};
 use libc::{AF_INET,close,IPPROTO_SCTP,SCTP_EVENTS};
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept};
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -62,20 +62,18 @@ impl SctpServer{
     pub fn read(&mut self, buffer: &mut [u8],
                 client_address: Option<&mut SockAddrIn>,
                 sender_info: Option<&mut SctpSenderInfo>,
-                flags: i32) ->Result<usize>{
+                flags: &mut i32) ->Result<usize>{
 
-        let mut flags = 0;
-
-        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, &mut flags){
+        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, flags){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self,buffer: &mut [u8],to_address: &mut SockAddrIn, stream_number: u16, flags: u32, ttl: u32) -> Result<usize>{
+    pub fn write(&mut self, buffer: &mut [u8], to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
 
-        match safe_sctp_sendmsg(self.sock_fd,buffer,to_address,0,flags,stream_number,ttl,0){
+        match safe_sctp_sendmsg(self.sock_fd,buffer,to_address,0,flags as u32,stream_number,ttl,0){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
@@ -92,6 +90,19 @@ impl SctpServer{
         }
 
         self
+    }
+    /// Method used to accept a new client, stores the address into client_address if specified
+    fn accept(&self,client_address: Option<&mut SockAddrIn>) -> Result<i32>{
+
+        let mut dummy_size = size_of::<SockAddrIn>();
+
+        let client_size = match client_address{
+            None => None,
+            Some(_) => Some(&mut dummy_size),
+        };
+
+         safe_accept(self.sock_fd,client_address,client_size)
+
     }
 }
 

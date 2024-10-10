@@ -14,6 +14,11 @@ use crate::modules::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_
 use crate::modules::sctp_api::{SctpEventSubscribe,events_to_u8};
 
 //netstat -lnp | grep sctp
+
+const MAX_CONNECTIONS: u16 = 100;
+const PORT: u16 = 7878;
+const IPV4: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
+
 fn main() {
 
     let mut events = SctpEventSubscribe::new();
@@ -21,9 +26,9 @@ fn main() {
 
     let mut server = SctpServerBuilder::new()
         .descriptor()
-        .address(Ipv4Addr::new(0,0,0,0))
-        .port(7878)
-        .max_connections(20)
+        .address(IPV4)
+        .port(PORT)
+        .max_connections(MAX_CONNECTIONS)
         .events(events)
         .build();
 
@@ -31,7 +36,7 @@ fn main() {
           .listen()
           .options();
 
-    let mut buffer: Vec<u8> = vec![0; 50];
+    let mut buffer: Vec<u8> = vec![0; 100];
 
     thread::sleep(Duration::from_secs(5));
     println!("Server started");
@@ -41,14 +46,20 @@ fn main() {
     let mut flags = 0;
 
     loop{
-        server.read(&mut buffer,Some(&mut client_address),Some(&mut sender_info),flags).unwrap();
+
+        let read_bytes = server.read(&mut buffer,Some(&mut client_address),Some(&mut sender_info),&mut flags).unwrap();
+        println!("Read {read_bytes} bytes");
+
+        // if let Err(error) = server.accept(Some(&mut client_address)){
+        //     panic!("Failed to accept client: {}", error);
+        // }
 
         debug_sockaddr(&client_address);
         debug_sctp_sndrcvinfo(&sender_info);
-        println!("{:?}",String::from_utf8(buffer.clone()));
+        println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
-        match server.write(&mut buffer,&mut client_address,sender_info.sinfo_stream+1,0,10){
-            Ok(_) => (),
+        match server.write(&mut buffer,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+            Ok(bytes) => println!("Wrote {bytes}"),
             Err(e) => println!("Write Error: {:?}",e)
         }
     }
