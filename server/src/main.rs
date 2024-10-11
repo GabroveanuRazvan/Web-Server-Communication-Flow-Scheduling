@@ -20,7 +20,6 @@ const PORT: u16 = 7878;
 const IPV4: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 
 fn main() {
-
     let mut events = SctpEventSubscribe::new();
     events.sctp_data_io_event = 1;
 
@@ -36,7 +35,7 @@ fn main() {
           .listen()
           .options();
 
-    let mut buffer: Vec<u8> = vec![0; 100];
+    let mut buffer: Vec<u8> = vec![0; 1024];
 
     thread::sleep(Duration::from_secs(5));
     println!("Server started");
