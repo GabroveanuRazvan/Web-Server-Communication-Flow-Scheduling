@@ -11,12 +11,12 @@ use utils::sctp_server::SctpServerBuilder;
 use libc::{in_addr_t, AF_INET};
 use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
 use utils::sctp_api::{SctpEventSubscribe,events_to_u8};
-
+use std::ascii::escape_default;
 //netstat -lnp | grep sctp
 
 const MAX_CONNECTIONS: u16 = 100;
 const PORT: u16 = 7878;
-const IPV4: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
+const IPV4: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
 
 fn main() {
     let mut events = SctpEventSubscribe::new();
@@ -34,7 +34,7 @@ fn main() {
           .listen()
           .options();
 
-    let mut buffer: Vec<u8> = vec![0; 1024];
+    let mut buffer: Vec<u8> = vec![0; 4096];
 
     thread::sleep(Duration::from_secs(5));
     println!("Server started");
@@ -56,6 +56,7 @@ fn main() {
         debug_sockaddr(&client_address);
         debug_sctp_sndrcvinfo(&sender_info);
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
+
 
         // match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
         //     Ok(bytes) => println!("Wrote {bytes}"),
