@@ -13,4 +13,12 @@ name = "sctp_web_server"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "utils",
+]
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]

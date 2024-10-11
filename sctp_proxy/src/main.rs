@@ -1,4 +1,9 @@
+
+use utils::sctp_api::SctpEventSubscribe;
+
 fn main() {
 
-    println!("Hello, world!");
+    let x = SctpEventSubscribe::new();
+
+    println!("{x:?}");
 }

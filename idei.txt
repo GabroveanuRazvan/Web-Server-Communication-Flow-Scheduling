@@ -1,0 +1,6 @@
+Am o alta idee. In loc sa creez un thread de fiecare data cand vine un mesaj,
+ cum ar fi sa am un thread pool cu numar fix sa zicem 10 threaduri, care sunt
+  toate pornite cand serverul incepe sa ruleze. Si fiecare thread o sa astepte
+   in loop mesaje folosind sctp_recv. Astfel cand un thread primeste mesaj,
+    incepe sa il proceseze. Cat timp il proceseaza celelate threaduri vor
+     astepta mesaje de la clienti. Si banuiesc ca am sa protejez apelul sctp_recv printr-un mutex.

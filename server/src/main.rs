@@ -1,5 +1,4 @@
 
-mod modules;
 
 use std::ffi::CString;
 use std::{mem, thread};
@@ -7,11 +6,11 @@ use std::io::{BufReader, Read};
 use std::net::Ipv4Addr;
 use std::thread::Thread;
 use std::time::Duration;
-use crate::modules::sctp_server::SctpServerBuilder;
+use utils::sctp_server::SctpServerBuilder;
 
 use libc::{in_addr_t, AF_INET};
-use crate::modules::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
-use crate::modules::sctp_api::{SctpEventSubscribe,events_to_u8};
+use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
+use utils::sctp_api::{SctpEventSubscribe,events_to_u8};
 
 //netstat -lnp | grep sctp
 
@@ -58,10 +57,10 @@ fn main() {
         debug_sctp_sndrcvinfo(&sender_info);
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
-        match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
-            Ok(bytes) => println!("Wrote {bytes}"),
-            Err(e) => println!("Write Error: {:?}",e)
-        }
+        // match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+        //     Ok(bytes) => println!("Wrote {bytes}"),
+        //     Err(e) => println!("Write Error: {:?}",e)
+        // }
     }
 
 
