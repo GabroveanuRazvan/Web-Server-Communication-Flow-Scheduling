@@ -10,7 +10,7 @@ use utils::sctp_server::SctpServerBuilder;
 
 use libc::{in_addr_t, AF_INET};
 use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
-use utils::sctp_api::{SctpEventSubscribe,events_to_u8};
+use utils::sctp_api::{SctpEventSubscribe, events_to_u8, SctpPeer,SctpPeerBuilder};
 use std::ascii::escape_default;
 //netstat -lnp | grep sctp
 
@@ -58,11 +58,10 @@ fn main() {
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
 
-        // match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
-        //     Ok(bytes) => println!("Wrote {bytes}"),
-        //     Err(e) => println!("Write Error: {:?}",e)
-        // }
+        match server.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+            Ok(bytes) => println!("Wrote {bytes}"),
+            Err(e) => println!("Write Error: {:?}",e)
+        }
     }
-
 
 }
