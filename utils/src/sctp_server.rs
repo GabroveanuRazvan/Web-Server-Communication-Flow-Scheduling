@@ -3,7 +3,7 @@ use std::mem;
 use std::net::{Ipv4Addr};
 use libc::{AF_INET,close,IPPROTO_SCTP,SCTP_EVENTS};
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeer, SctpPeerBuilder};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in};
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -23,15 +23,7 @@ impl SctpServer{
 
         for address in &self.addresses{
 
-            let mut current_socket_address: SockAddrIn = unsafe{mem::zeroed()};
-
-            current_socket_address.sin_family = AF_INET as u16;
-            current_socket_address.sin_port = self.port.to_be();
-
-            // strange bug: if inet_pton is called after the initialization of family and port s_addr will be 0 no matter the ip given
-            if let Err(error) = safe_inet_pton(address.to_string(),&mut current_socket_address.sin_addr.s_addr) {
-                panic!("Inet_pton error: {error}");
-            }
+            let mut current_socket_address: SockAddrIn = new_sock_addr_in(self.port,address.clone());
 
             debug_sockaddr(&current_socket_address);
 

@@ -1,5 +1,5 @@
 use libc::{close, AF_INET, IPPROTO_SCTP, SCTP_EVENTS};
-use crate::libc_wrappers::{debug_sockaddr, safe_inet_pton, safe_setsockopt, SctpSenderInfo, SockAddrIn};
+use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_inet_pton, safe_setsockopt, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeer, SctpPeerBuilder};
 use crate::sctp_server::SctpServer;
 use std::io::Result;
@@ -7,7 +7,7 @@ use std::mem;
 use std::net::Ipv4Addr;
 use std::ops::BitAnd;
 
-
+/// Sctp client implementation
 #[derive(Debug)]
 pub struct SctpClient{
     sock_fd: i32,
@@ -18,21 +18,14 @@ pub struct SctpClient{
 
 impl SctpClient{
 
-    pub fn connect(&self, flags: i32) -> &Self{
+    /// Usec sctp_connectx to connect to multiple interfaces of the server
+    pub fn connect(&self) -> &Self{
 
         let mut socket_addresses: Vec<SockAddrIn> = Vec::new();
 
         for address in &self.addresses{
 
-            let mut current_socket_address: SockAddrIn = unsafe{mem::zeroed()};
-
-            current_socket_address.sin_family = AF_INET as u16;
-            current_socket_address.sin_port = self.port.to_be();
-
-            // strange bug: if inet_pton is called after the initialization of family and port s_addr will be 0 no matter the ip given
-            if let Err(error) = safe_inet_pton(address.to_string(),&mut current_socket_address.sin_addr.s_addr) {
-                panic!("Inet_pton error: {error}");
-            }
+            let mut current_socket_address: SockAddrIn = new_sock_addr_in(self.port,address.clone());
 
             debug_sockaddr(&current_socket_address);
 
@@ -40,25 +33,16 @@ impl SctpClient{
 
         }
 
-        if let Err(error) = safe_sctp_connectx(self.sock_fd, &mut socket_addresses, flags){
+        if let Err(error) = safe_sctp_connectx(self.sock_fd, &mut socket_addresses){
             panic!("Connect error {}", error);
         }
 
         self
     }
 
-    pub fn get_socket_address(&self) -> SockAddrIn{
-        let mut socket_address: SockAddrIn = unsafe{mem::zeroed()};
-
-        socket_address.sin_family = AF_INET as u16;
-        socket_address.sin_port = self.port.to_be();
-
-        // strange bug: if inet_pton is called after the initialization of family and port s_addr will be 0 no matter the ip given
-        if let Err(error) = safe_inet_pton(self.addresses[0].to_string(),&mut socket_address.sin_addr.s_addr) {
-            panic!("Inet_pton error: {error}");
-        }
-
-        debug_sockaddr(&socket_address);
+    /// Returns a SockAddrIn of the first Ipv4 address of the client, mainly used with write method
+    pub fn get_first_socket_address(&self) -> SockAddrIn{
+        let mut socket_address: SockAddrIn = new_sock_addr_in(self.port,self.addresses[0].clone());
 
         socket_address
     }

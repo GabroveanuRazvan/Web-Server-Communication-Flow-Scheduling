@@ -23,11 +23,11 @@ fn main() {
 
     println!("Client built.");
 
-    client.connect(0);
+    client.connect();
 
     let mut buffer: Vec<u8> = "mesaj mare sa se vada".to_string().into_bytes();
     let mut size = buffer.len() as isize;
-    let mut addr = client.get_socket_address();
+    let mut addr = client.get_first_socket_address();
 
     let x = client.write(&mut buffer[..],size, &mut addr,0,0,0);
     println!("{x:?}");

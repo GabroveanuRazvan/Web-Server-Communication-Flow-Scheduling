@@ -97,7 +97,7 @@ extern "C"{
     fn sctp_recvmsg(sd: c_int, msg: *mut c_void, len: size_t, from: *mut sockaddr_in, fromlen: *mut socklen_t, sri: *mut sctp_sndrcvinfo, msg_flags: *mut c_int) -> c_int;
     fn sctp_sendmsg(sd: c_int, msg: *const c_void, len: size_t, to: *const sockaddr_in, tolen: socklen_t, ppid: u32, flags: u32, stream_no: u16, timetolive: u32, context: u32) -> c_int;
     fn sctp_bindx(sd: c_int, addrs: *mut sockaddr_in, addrcnt: c_int, flags: c_int) -> c_int;
-    fn sctp_connectx(sd: c_int, addrs: *mut sockaddr_in, addrcnt: c_int, flags: c_int) -> c_int;
+    fn sctp_connectx(sd: c_int, addrs: *mut sockaddr_in, addrcnt: c_int, flags: *mut c_int) -> c_int;
     fn sctp_getpaddrs(sd: c_int, assoc_id: sctp_assoc_t, addrs: *mut *mut sockaddr_in) -> c_int;
     fn sctp_freepaddrs(addrs: *mut sockaddr_in);
     fn sctp_getladdrs(sd: c_int, assoc_id: sctp_assoc_t, addrs: *mut *mut sockaddr_in) -> c_int;
@@ -208,12 +208,12 @@ pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [SockAddrIn], flags: i32) -> 
 }
 
 /// Wrapper function for sctp_connextx function
-pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn], flags: i32) -> Result<i32>{
+pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn]) -> Result<i32>{
     let address_count = addrs.len() as i32;
     let addrs_ptr = addrs.as_mut_ptr();
 
     let result = unsafe{
-        sctp_connectx(socket_fd,addrs_ptr,address_count,flags)
+        sctp_connectx(socket_fd,addrs_ptr,address_count,ptr::null_mut())
     };
 
     wrap_result_nonnegative(result)

@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr,socklen_t};
+use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr};
 use std::io::Result;
 use std::net::Ipv4Addr;
 use std::ptr;
@@ -128,6 +128,24 @@ pub fn get_ptr_from_mut_ref<T>(reference: Option<&mut T>) -> *mut T{
     else{
         ptr::null_mut()
     }
+}
+
+
+/// Method like functions for C structs that cannot have a direct implementation
+
+
+/// Creates a new sock_addr_in like a constructor
+pub fn new_sock_addr_in(port: u16,ipv4: Ipv4Addr) -> SockAddrIn{
+
+    SockAddrIn{
+        sin_family: AF_INET as u16,
+        sin_port: port.to_be(),
+        sin_addr: in_addr{
+            s_addr: u32::from(ipv4).to_be(),
+        },
+        sin_zero: [0;8],
+    }
+
 }
 
 /// Debugging functions
