@@ -54,16 +54,16 @@ impl SctpPeer for SctpClient{
     fn read(&mut self, buffer: &mut [u8],
             client_address: Option<&mut SockAddrIn>,
             sender_info: Option<&mut SctpSenderInfo>,
-            flags: &mut i32) ->Result<isize>{
+            flags: &mut i32) ->Result<usize>{
 
         match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, flags){
-            Ok(size) => Ok(size as isize),
+            Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
     }
 
     /// Method used to write data to a peer using a designated stream
-    fn write(&mut self, buffer: &mut [u8], num_bytes: isize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+    fn write(&mut self, buffer: &mut [u8], num_bytes: usize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,to_address,0,flags as u32,stream_number,ttl,0){
             Ok(size) => Ok(size as usize),

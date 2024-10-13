@@ -20,11 +20,11 @@ pub trait SctpPeer{
     fn read(&mut self, buffer: &mut [u8],
                  client_address: Option<&mut SockAddrIn>,
                  sender_info: Option<&mut SctpSenderInfo>,
-                 flags: &mut i32) ->Result<isize>;
+                 flags: &mut i32) ->Result<usize>;
 
     fn write(&mut self,
              buffer: &mut [u8],
-             num_bytes: isize,
+             num_bytes: usize,
              to_address: &mut SockAddrIn,
              stream_number: u16,
              flags: u16, ttl: u32) -> Result<usize>;
@@ -159,7 +159,7 @@ pub fn safe_sctp_recvmsg(
 pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
-    msg_size: isize,
+    msg_size: usize,
     to_address: &mut SockAddrIn,
     payload_protocol_id: u32,
     flags: u32,
@@ -235,7 +235,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 pub fn safe_sctp_socket() -> Result<i32>{
 
     let result = unsafe{
-        socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP)
+        socket(AF_INET,SOCK_STREAM,IPPROTO_SCTP)
     };
 
     wrap_result_nonnegative(result)

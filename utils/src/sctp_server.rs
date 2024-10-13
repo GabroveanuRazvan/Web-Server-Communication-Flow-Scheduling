@@ -52,7 +52,7 @@ impl SctpServer{
 
 
     /// Method used to accept a new client, stores the address into client_address if specified
-    fn accept(&self,client_address: Option<&mut SockAddrIn>) -> Result<i32>{
+    pub fn accept(&self,client_address: Option<&mut SockAddrIn>) -> Result<SctpStream>{
 
         let mut dummy_size = size_of::<SockAddrIn>();
 
@@ -61,10 +61,11 @@ impl SctpServer{
             Some(_) => Some(&mut dummy_size),
         };
 
-         safe_accept(self.sock_fd,client_address,client_size)
+         let mut sock_fd = safe_accept(self.sock_fd,client_address,client_size)?;
+
+        Ok(SctpStream::new(sock_fd))
 
     }
-
 
 }
 
@@ -74,16 +75,16 @@ impl SctpPeer for SctpServer{
     fn read(&mut self, buffer: &mut [u8],
                 client_address: Option<&mut SockAddrIn>,
                 sender_info: Option<&mut SctpSenderInfo>,
-                flags: &mut i32) ->Result<isize>{
+                flags: &mut i32) ->Result<usize>{
 
         match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, flags){
-            Ok(size) => Ok(size as isize),
+            Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
     }
 
     /// Method used to write data to a peer using a designated stream
-    fn write(&mut self, buffer: &mut [u8], num_bytes: isize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+    fn write(&mut self, buffer: &mut [u8], num_bytes: usize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,to_address,0,flags as u32,stream_number,ttl,0){
             Ok(size) => Ok(size as usize),
@@ -203,6 +204,41 @@ impl SctpPeerBuilder for SctpServerBuilder {
         self
     }
 
+}
 
 
+
+pub struct SctpStream{
+    pub sock_fd: i32,
+}
+
+impl SctpStream{
+
+    pub fn new(sock_fd: i32) -> Self{
+        Self{
+            sock_fd,
+        }
+    }
+
+    /// Method used to read data from the socket, stores the client address and info
+    pub fn read(&mut self, buffer: &mut [u8],
+            client_address: Option<&mut SockAddrIn>,
+            sender_info: Option<&mut SctpSenderInfo>,
+            flags: &mut i32) ->Result<usize>{
+
+        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address, sender_info, flags){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Method used to write data to a peer using a designated stream
+    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, to_address: &mut SockAddrIn, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+
+        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,to_address,0,flags as u32,stream_number,ttl,0){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
+
+    }
 }
