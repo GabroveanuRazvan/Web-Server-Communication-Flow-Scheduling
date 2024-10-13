@@ -4,7 +4,7 @@ use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_
 
 use std::{ptr, slice};
 use std::io::{Result};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use crate::sctp_server::SctpServer;
 use super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
 
@@ -18,14 +18,14 @@ pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 /// A sctp peer(server or client) should be able to read or write
 pub trait SctpPeer{
     fn read(&mut self, buffer: &mut [u8],
-                 client_address: Option<&mut SockAddrIn>,
+                 client_address: Option<&mut SocketAddrV4>,
                  sender_info: Option<&mut SctpSenderInfo>,
                  flags: &mut i32) ->Result<usize>;
 
     fn write(&mut self,
              buffer: &mut [u8],
              num_bytes: usize,
-             to_address: &mut SockAddrIn,
+             to_address: &SocketAddrV4,
              stream_number: u16,
              flags: u16, ttl: u32) -> Result<usize>;
 

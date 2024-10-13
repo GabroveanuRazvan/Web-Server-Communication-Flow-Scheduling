@@ -3,7 +3,7 @@
 use std::ffi::CString;
 use std::{mem, thread};
 use std::io::{BufReader, Read,Result};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::thread::Thread;
 use std::time::Duration;
 use utils::sctp_server::SctpServerBuilder;
@@ -39,7 +39,7 @@ fn main() -> Result<()> {
     thread::sleep(Duration::from_secs(5));
     println!("Server started");
 
-    let mut client_address : SockAddrIn = unsafe { mem::zeroed() };
+    let mut client_address : SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
     let mut sender_info: SctpSenderInfo = unsafe { mem::zeroed() };
     let mut flags = 0;
 
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
         //     panic!("Failed to accept client: {}", error);
         // }
 
-        debug_sockaddr(&client_address);
+        println!("{client_address:?}");
         debug_sctp_sndrcvinfo(&sender_info);
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 

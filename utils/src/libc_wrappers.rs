@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::io::Error;
 use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr};
 use std::io::Result;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::ptr;
 
 /// Aliases and structures that are not in libc
@@ -142,6 +142,37 @@ pub fn new_sock_addr_in(port: u16,ipv4: Ipv4Addr) -> SockAddrIn{
         sin_port: port.to_be(),
         sin_addr: in_addr{
             s_addr: u32::from(ipv4).to_be(),
+        },
+        sin_zero: [0;8],
+    }
+
+}
+
+
+pub fn c_to_sock_addr(addr: &SockAddrIn) -> SocketAddrV4{
+
+    // get the native byte order of the ip adddress
+    let ip_octets = addr.sin_addr.s_addr.to_ne_bytes();
+    // convert it to an ip address object
+    let ip = Ipv4Addr::from(ip_octets);
+    // get the port in current endianess from big endian
+    let port = u16::from_be(addr.sin_port);
+
+    SocketAddrV4::new(ip, port)
+}
+
+pub fn sock_addr_to_c(addr: &SocketAddrV4) -> SockAddrIn{
+    // get the octets and port
+    let ip_octets = addr.ip().octets();
+    let port = addr.port();
+
+    // the port will be in big endian
+    SockAddrIn{
+        sin_family: AF_INET as u16,
+        sin_port: port.to_be(),
+        sin_addr: in_addr{
+            // get the 32 bits integer of the ip address
+            s_addr: u32::from_ne_bytes(ip_octets),
         },
         sin_zero: [0;8],
     }
