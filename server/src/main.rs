@@ -43,30 +43,32 @@ fn main() -> Result<()> {
     let mut sender_info: SctpSenderInfo = unsafe { mem::zeroed() };
     let mut flags = 0;
 
-    loop{
+    for stream in server.incoming(){
 
-        let mut stream = server.accept(Some(&mut client_address))?;
-
+        let mut stream = stream.unwrap();
         println!("New client");
 
-        let bytes_read = stream.read(&mut buffer,Some(&mut client_address),Some(&mut sender_info),&mut flags)?;
+        println!("Client address: {}", client_address);
+
+        let bytes_read = stream.read(&mut buffer,Some(&mut sender_info),&mut flags)?;
         println!("Read {bytes_read} bytes");
 
-
+        println!("Client address: {}", client_address);
         // if let Err(error) = server.accept(Some(&mut client_address)){
         //     panic!("Failed to accept client: {}", error);
         // }
 
-        println!("{client_address:?}");
+
         debug_sctp_sndrcvinfo(&sender_info);
         println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
-
-        match stream.write(&mut buffer,bytes_read,&mut client_address,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+        match stream.write(&mut buffer,bytes_read,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
             Ok(bytes) => println!("Wrote {bytes}"),
             Err(e) => println!("Write Error: {:?}",e)
         }
     }
+
+
 
     Ok(())
 }

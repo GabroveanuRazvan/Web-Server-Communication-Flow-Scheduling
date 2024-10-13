@@ -145,6 +145,7 @@ impl SctpPeerBuilder for SctpClientBuilder{
 
     /// Creates a new builder with default values
     fn new() -> Self{
+
         Self{
             sock_fd: 0,
             addresses: vec![],
@@ -189,6 +190,7 @@ impl SctpPeerBuilder for SctpClientBuilder{
 
     /// Sets the events
     fn events(mut self, events: SctpEventSubscribe) -> Self{
+
         self.active_events = events;
         self
     }

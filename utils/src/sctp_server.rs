@@ -53,33 +53,40 @@ impl SctpServer{
 
 
     /// Method used to accept a new client, stores the address into client_address if specified
-    pub fn accept(&self,client_address: Option<&mut SocketAddrV4>) -> Result<SctpStream>{
+    pub fn accept(&self) -> Result<SctpStream>{
 
 
         let mut dummy_size = size_of::<SockAddrIn>();
 
-        // a new SockAddrIn where the client data will be stored if necessary
+        // a new SockAddrIn where the client data will be stored
         let mut returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
 
-        let (client_size,client_address_c) = match client_address{
-            None => (None,None),
-            // use a ref to borrow the reference
-            Some(ref address) =>{
-                // use * to get the refernce from the reference
-                returned_sock_addr_c = sock_addr_to_c(*address);
-                (Some(&mut dummy_size),Some(&mut returned_sock_addr_c))
-            } ,
-        };
+        let mut sock_fd = safe_accept(self.sock_fd,Some(&mut returned_sock_addr_c),Some(&mut dummy_size))?;
 
-        let mut sock_fd = safe_accept(self.sock_fd,client_address_c,client_size)?;
+        // create a new strem with its data
+        Ok(SctpStream::new(sock_fd,
+                           c_to_sock_addr(&returned_sock_addr_c),
+                           self.port,
+                           self.addresses.clone(),))
 
-        // if the client_address was not null, convert the returned c address to rust socketaddress
-        match client_address {
-            None => {}
-            Some(address) =>{ *address = c_to_sock_addr(&returned_sock_addr_c);}
+    }
+
+    /// Method used to create an Iterator that yields new SctpStreams
+    pub fn incoming(&self) -> Incoming{
+        Incoming::new(self)
+    }
+
+    ///Method used to handle clients
+
+    pub fn handle_client(mut stream: SctpStream){
+
+        let mut buffer = [0; 1024];
+
+        loop{
+
+
+
         }
-
-        Ok(SctpStream::new(sock_fd))
 
     }
 
@@ -247,44 +254,37 @@ impl SctpPeerBuilder for SctpServerBuilder {
 
 
 pub struct SctpStream{
-    pub sock_fd: i32,
+    sock_fd: i32,
+    address: SocketAddrV4,
+    peer_port: u16,
+    peer_addresses: Vec<Ipv4Addr>,
 }
 
 impl SctpStream{
 
-    pub fn new(sock_fd: i32) -> Self{
+    fn new(sock_fd: i32,address: SocketAddrV4, peer_port: u16, peer_addresses: Vec<Ipv4Addr>) -> Self{
+
         Self{
             sock_fd,
+            address,
+            peer_port,
+            peer_addresses,
         }
+    }
+
+    pub fn local_address(&self) -> SocketAddrV4{
+        self.address.clone()
     }
 
     /// Method used to read data from the socket, stores the client address and info
     pub fn read(&mut self, buffer: &mut [u8],
-            client_address: Option<&mut SocketAddrV4>,
             sender_info: Option<&mut SctpSenderInfo>,
             flags: &mut i32) ->Result<usize>{
 
-        let mut returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
+        let mut returned_sock_addr_c = sock_addr_to_c(&self.local_address());
 
-        let mut client_address_c = match client_address{
-            None => None,
-            Some(_) => {
-                returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
-                Some(&mut returned_sock_addr_c)
-            }
-        };
-
-        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address_c, sender_info, flags){
-            Ok(size) =>{
-
-                // if the client_address was not null, convert the returned c address to rust socketaddress
-                match client_address {
-                    None => {}
-                    Some(address) =>{ *address = c_to_sock_addr(&returned_sock_addr_c);}
-                }
-
-                Ok(size as usize)
-            } ,
+        match safe_sctp_recvmsg(self.sock_fd, buffer, Some(&mut returned_sock_addr_c), sender_info, flags){
+            Ok(size) => 2Ok(size as usize),
             Err(error) => Err(error),
         }
 
@@ -292,15 +292,40 @@ impl SctpStream{
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, to_address: &SocketAddrV4, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
 
-        let mut sock_addr_c = sock_addr_to_c(to_address);
+        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,0,flags as u32,stream_number,ttl,0){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
 
+    }
+
+}
+
+// Iterator struct for the incoming method of the SctpServer
+pub struct Incoming<'a>{
+    sctp_listener: &'a SctpServer,
+}
+
+// Create a new wrapper over a SctpServer
+impl <'a> Incoming<'a>{
+    fn new(sctp_listener: &'a SctpServer) -> Self{
+        Incoming{sctp_listener}
+    }
+}
+
+// Implementation the iterator trait, the next method will call accept and yield the iterator
+impl<'a> Iterator for Incoming<'a>{
+    type Item = Result<SctpStream>;
+
+    fn next(&mut self) -> Option<Self::Item>{
+        match self.sctp_listener.accept(){
+            Ok(stream) => Some(Ok(stream)),
+            Err(error) => Some(Err(error)),
+        }
     }
 
 }

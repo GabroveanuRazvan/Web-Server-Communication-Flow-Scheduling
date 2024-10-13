@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::{mem, thread};
 use libc::{sa_family_t, AF_INET};
-use utils::libc_wrappers::{debug_sockaddr, safe_inet_pton, SockAddrIn};
+use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
 use utils::sctp_api::{safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeer, SctpPeerBuilder};
 use utils::sctp_client::{SctpClient, SctpClientBuilder};
 
@@ -21,7 +21,7 @@ fn main() {
         .events(events)
         .build();
 
-    sctp_client.connect();
+    sctp_client.options().connect();
 
     let tcp_server = TcpListener::bind(("0.0.0.0", PORT)).unwrap();
 
@@ -54,21 +54,23 @@ fn handle_client(mut stream: TcpStream, sctp_client: &mut SctpClient) {
                 let received_message = String::from_utf8_lossy(&buffer[..n]);
                 println!("Client received message: {}", received_message);
 
-                if let Err(error) = sctp_client.write(&mut buffer[..],n,&mut sctp_client.get_first_socket_address(),0,0,0){
+                if let Err(error) = sctp_client.write(&mut buffer[..],n,&mut sctp_client.get_first_socket_address(),7,0,0){
                     println!("Client write error: {}", error);
                 }
 
                 let mut flags = 0;
-
-                match sctp_client.read(&mut buffer[..],None,None,&mut flags){
+                let mut sender_info: SctpSenderInfo = unsafe { mem::zeroed() };
+                match sctp_client.read(&mut buffer[..],None,Some(&mut sender_info),&mut flags){
                     Err(error)=>{
                         println!("Sctp read error: {}", error);
                     }
 
                     Ok(n) =>{
+                        debug_sctp_sndrcvinfo(&sender_info);
                         println!("Sctp received message: {}", String::from_utf8_lossy(&buffer[..n]));
                     }
                 }
+
 
             }
 
