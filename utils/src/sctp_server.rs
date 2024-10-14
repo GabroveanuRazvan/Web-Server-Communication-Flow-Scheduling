@@ -1,9 +1,9 @@
-use std::io::{Read,Result};
+use std::io::{Error, Read, Result};
 use std::mem;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{AF_INET,close,IPPROTO_SCTP,SCTP_EVENTS};
-use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeer, SctpPeerBuilder};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr};
+use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
+use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg,sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeer, SctpPeerBuilder};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo};
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -78,16 +78,29 @@ impl SctpServer{
 
     ///Method used to handle clients
 
-    pub fn handle_client(mut stream: SctpStream){
+    pub fn handle_client(mut stream: SctpStream) -> Result<()>{
 
-        let mut buffer = [0; 1024];
+        println!("New client");
 
-        loop{
+        let mut buffer: Vec<u8> = vec![0; 4096];
+        let mut client_address : SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
+        let mut sender_info: SctpSenderInfo = unsafe { mem::zeroed() };
+        let mut flags = 0;
 
+        let bytes_read = stream.read(&mut buffer,Some(&mut sender_info),&mut flags)?;
+        println!("Read {bytes_read} bytes");
 
+        println!("Client address: {}", client_address);
 
+        debug_sctp_sndrcvinfo(&sender_info);
+        println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
+
+        match stream.write(&mut buffer,bytes_read,sender_info.sinfo_stream,sender_info.sinfo_flags,0){
+            Ok(bytes) => println!("Wrote {bytes}"),
+            Err(e) => println!("Write Error: {:?}",e)
         }
 
+        Ok(())
     }
 
 }
@@ -258,6 +271,7 @@ pub struct SctpStream{
     address: SocketAddrV4,
     peer_port: u16,
     peer_addresses: Vec<Ipv4Addr>,
+    ttl: u32,
 }
 
 impl SctpStream{
@@ -269,9 +283,21 @@ impl SctpStream{
             address,
             peer_port,
             peer_addresses,
+            ttl: 0,
         }
     }
 
+    /// Method used to set write ttl
+    pub fn set_ttl(&mut self, ttl: u32){
+        self.ttl = ttl;
+    }
+
+    /// Method used to get ttl
+    pub fn ttl(&self) ->u32{
+        self.ttl
+    }
+
+    /// Method used to get the local address of the stream
     pub fn local_address(&self) -> SocketAddrV4{
         self.address.clone()
     }
@@ -284,7 +310,7 @@ impl SctpStream{
         let mut returned_sock_addr_c = sock_addr_to_c(&self.local_address());
 
         match safe_sctp_recvmsg(self.sock_fd, buffer, Some(&mut returned_sock_addr_c), sender_info, flags){
-            Ok(size) => 2Ok(size as usize),
+            Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
 
@@ -292,14 +318,25 @@ impl SctpStream{
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
+    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, stream_number: u16, flags: u16) -> Result<usize>{
 
         let mut sock_addr_c = sock_addr_to_c(&self.local_address());
 
-        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,0,flags as u32,stream_number,ttl,0){
+        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,0,flags as u32,stream_number,self.ttl,0){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
+
+    }
+
+}
+
+/// Used to gracefully close the socket descriptor when the client goes out of scope
+impl Drop for SctpStream{
+    fn drop(&mut self){
+
+        unsafe{close(self.sock_fd);}
+        println!("Sctp client closed");
 
     }
 

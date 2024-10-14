@@ -102,7 +102,7 @@ extern "C"{
     fn sctp_freepaddrs(addrs: *mut sockaddr_in);
     fn sctp_getladdrs(sd: c_int, assoc_id: sctp_assoc_t, addrs: *mut *mut sockaddr_in) -> c_int;
     fn sctp_freeladdrs(addrs: *mut sockaddr_in);
-    fn sctp_opt_info(sd: c_int,assoc_id: sctp_assoc_t, opt: c_int, arg: *mut c_void, size: *mut socklen_t) -> c_int;
+    pub fn sctp_opt_info(sd: c_int,assoc_id: sctp_assoc_t, opt: c_int, arg: *mut c_void, size: *mut socklen_t) -> c_int;
     fn sctp_peeloff(sd: c_int,assoc_id: sctp_assoc_t) -> c_int;
 
 }
