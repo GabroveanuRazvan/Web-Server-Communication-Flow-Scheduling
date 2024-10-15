@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
@@ -59,16 +59,26 @@ pub fn safe_inet_pton(ip: String, to: &mut u32) -> Result<i32>{
 }
 
 /// Wrapper function used to set the socket options
-pub fn safe_setsockopt(socket: i32, level:i32, option_name:i32, option_value:&[u8]) -> Result<i32>{
+pub fn safe_setsockopt(socket_fd: i32, level:i32, option_name:i32, option_value:&[u8]) -> Result<i32>{
 
     let option_length = option_value.len() as u32;
 
     let result = unsafe{
-        setsockopt(socket,level,option_name,option_value.as_ptr() as *const c_void,option_length)
+        setsockopt(socket_fd,level,option_name,option_value.as_ptr() as *const c_void,option_length)
     };
 
     wrap_result_nonnegative(result)
 
+}
+
+/// Wrapper function used for recv
+pub fn safe_recv(socket_fd: i32, msg: &mut [u8],message_size: usize,flags: i32) -> Result<i32>{
+
+    let result = unsafe{
+        recv(socket_fd,msg.as_mut_ptr() as *mut c_void,message_size as size_t,flags) as i32
+    };
+
+    wrap_result_nonnegative(result)
 }
 
 /// Function that extracts errno safely

@@ -1,7 +1,7 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{close, IPPROTO_SCTP, SCTP_EVENTS};
-use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
+use libc::{close, recvmsg, IPPROTO_SCTP, MSG_PEEK, SCTP_EVENTS};
+use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
 
@@ -111,6 +111,17 @@ impl SctpStream{
             Err(error) => Err(error),
         }
 
+    }
+
+    /// Method used to peek into the socket buffer
+    pub fn peek(&self, buffer: &mut[u8]) -> Result<usize>{
+
+        let message_size = buffer.len();
+
+        match safe_recv(self.sock_fd,buffer,message_size,MSG_PEEK){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
     }
 
     /// Method used to activate the event options of the client

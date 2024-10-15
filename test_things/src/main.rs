@@ -31,14 +31,20 @@ fn main() {
         sctp_client.write(&mut buffer[..],6,i,0);
     }
 
-    for i in 0..10{
-        let mut buffer: Vec<u8> = vec![0; 10];
-        sctp_client.read(&mut buffer,Some(&mut sender_info),None);
+    let mut buffer: Vec<u8> = vec![0; 100];
 
-        println!("{}",String::from_utf8_lossy(&buffer));
-    }
+    let s = sctp_client.peek(&mut buffer);
+    println!("{s:?}");
+    println!("{:?}", String::from_utf8_lossy(&buffer));
 
-    debug_sctp_sndrcvinfo(&sender_info);
+    let s = sctp_client.read(&mut buffer,None,None);
+    println!("{s:?}");
+    println!("{:?}", String::from_utf8_lossy(&buffer));
+
+    // sctp_client.read(&mut buffer,Some(&mut sender_info),None);
+
+
+    // debug_sctp_sndrcvinfo(&sender_info);
 
     thread::sleep(Duration::from_secs(50));
 
