@@ -4,7 +4,7 @@ use std::io::Error;
 use libc::{__errno_location, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use std::ptr;
+use std::{mem, ptr};
 
 /// Aliases and structures that are not in libc
 
@@ -146,6 +146,13 @@ pub fn new_sock_addr_in(port: u16,ipv4: Ipv4Addr) -> SockAddrIn{
         sin_zero: [0;8],
     }
 
+}
+
+/// Creates an empty sctp_sndrinfo
+pub fn new_sctp_sndrinfo() -> SctpSenderInfo{
+
+    let info: SctpSenderInfo = unsafe { mem::zeroed() };
+    info
 }
 
 

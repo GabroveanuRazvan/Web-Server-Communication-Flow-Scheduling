@@ -3,10 +3,9 @@ use std::thread;
 use std::thread::Thread;
 use std::time::Duration;
 use libc::SCTP_SENDALL;
-use utils::libc_wrappers::{sock_addr_to_c, c_to_sock_addr, debug_sockaddr};
+use utils::libc_wrappers::{sock_addr_to_c, c_to_sock_addr, debug_sockaddr, new_sctp_sndrinfo, debug_sctp_sndrcvinfo};
 use utils::sctp_api::{SctpEventSubscribe, SctpEventSubscribeBuilder, SctpPeer, SctpPeerBuilder};
-use utils::sctp_client::SctpClientBuilder;
-use utils::sctp_server::{SctpStream, SctpStreamBuilder};
+use utils::sctp_client::SctpStreamBuilder;
 
 const PORT: u16 = 7878;
 const IPV4: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
@@ -25,18 +24,21 @@ fn main() {
 
     sctp_client.options();
     sctp_client.connect();
+    let mut sender_info = new_sctp_sndrinfo();
 
     for i in 0..10{
         let mut buffer = format!("mesaj{}",i).to_string().into_bytes();
         sctp_client.write(&mut buffer[..],6,i,0);
     }
 
-    for i in 0..20{
+    for i in 0..10{
         let mut buffer: Vec<u8> = vec![0; 10];
-        sctp_client.read(&mut buffer,None,None);
+        sctp_client.read(&mut buffer,Some(&mut sender_info),None);
 
         println!("{}",String::from_utf8_lossy(&buffer));
     }
+
+    debug_sctp_sndrcvinfo(&sender_info);
 
     thread::sleep(Duration::from_secs(50));
 
