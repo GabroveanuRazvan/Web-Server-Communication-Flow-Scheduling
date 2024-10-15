@@ -67,7 +67,6 @@ pub struct SctpEventSubscribe {
     pub sctp_send_failure_event_event: u8,
 }
 
-
 impl SctpEventSubscribe{
     /// Method used to quickly initialize a raw object without using mem::zeroed
     pub fn new() -> SctpEventSubscribe {
@@ -89,6 +88,135 @@ impl SctpEventSubscribe{
         }
     }
 }
+
+/// Builder pattern for SctpEventSubstribe
+pub struct SctpEventSubscribeBuilder {
+    sctp_data_io_event: u8,
+    sctp_association_event: u8,
+    sctp_address_event: u8,
+    sctp_send_failure_event: u8,
+    sctp_peer_error_event: u8,
+    sctp_shutdown_event: u8,
+    sctp_partial_delivery_event: u8,
+    sctp_adaptation_layer_event: u8,
+    sctp_authentication_event: u8,
+    sctp_sender_dry_event: u8,
+    sctp_stream_reset_event: u8,
+    sctp_assoc_reset_event: u8,
+    sctp_stream_change_event: u8,
+    sctp_send_failure_event_event: u8,
+}
+
+impl SctpEventSubscribeBuilder {
+    pub fn new() -> Self {
+        Self {
+            sctp_data_io_event: 0,
+            sctp_association_event: 0,
+            sctp_address_event: 0,
+            sctp_send_failure_event: 0,
+            sctp_peer_error_event: 0,
+            sctp_shutdown_event: 0,
+            sctp_partial_delivery_event: 0,
+            sctp_adaptation_layer_event: 0,
+            sctp_authentication_event: 0,
+            sctp_sender_dry_event: 0,
+            sctp_stream_reset_event: 0,
+            sctp_assoc_reset_event: 0,
+            sctp_stream_change_event: 0,
+            sctp_send_failure_event_event: 0,
+        }
+    }
+
+    pub fn sctp_data_io_event(mut self) -> Self {
+        self.sctp_data_io_event = 1;
+        self
+    }
+
+    pub fn sctp_association_event(mut self) -> Self {
+        self.sctp_association_event = 1;
+        self
+    }
+
+    pub fn sctp_address_event(mut self) -> Self {
+        self.sctp_address_event = 1;
+        self
+    }
+
+    pub fn sctp_send_failure_event(mut self) -> Self {
+        self.sctp_send_failure_event = 1;
+        self
+    }
+
+    pub fn sctp_peer_error_event(mut self) -> Self {
+        self.sctp_peer_error_event = 1;
+        self
+    }
+
+    pub fn sctp_shutdown_event(mut self) -> Self {
+        self.sctp_shutdown_event = 1;
+        self
+    }
+
+    pub fn sctp_partial_delivery_event(mut self) -> Self {
+        self.sctp_partial_delivery_event = 1;
+        self
+    }
+
+    pub fn sctp_adaptation_layer_event(mut self) -> Self {
+        self.sctp_adaptation_layer_event = 1;
+        self
+    }
+
+    pub fn sctp_authentication_event(mut self) -> Self {
+        self.sctp_authentication_event = 1;
+        self
+    }
+
+    pub fn sctp_sender_dry_event(mut self) -> Self {
+        self.sctp_sender_dry_event = 1;
+        self
+    }
+
+    pub fn sctp_stream_reset_event(mut self) -> Self {
+        self.sctp_stream_reset_event = 1;
+        self
+    }
+
+    pub fn sctp_assoc_reset_event(mut self) -> Self {
+        self.sctp_assoc_reset_event = 1;
+        self
+    }
+
+    pub fn sctp_stream_change_event(mut self) -> Self {
+        self.sctp_stream_change_event = 1;
+        self
+    }
+
+    pub fn sctp_send_failure_event_event(mut self) -> Self {
+        self.sctp_send_failure_event_event = 1;
+        self
+    }
+
+    pub fn build(self) -> SctpEventSubscribe {
+        SctpEventSubscribe {
+            sctp_data_io_event: self.sctp_data_io_event,
+            sctp_association_event: self.sctp_association_event,
+            sctp_address_event: self.sctp_address_event,
+            sctp_send_failure_event: self.sctp_send_failure_event,
+            sctp_peer_error_event: self.sctp_peer_error_event,
+            sctp_shutdown_event: self.sctp_shutdown_event,
+            sctp_partial_delivery_event: self.sctp_partial_delivery_event,
+            sctp_adaptation_layer_event: self.sctp_adaptation_layer_event,
+            sctp_authentication_event: self.sctp_authentication_event,
+            sctp_sender_dry_event: self.sctp_sender_dry_event,
+            sctp_stream_reset_event: self.sctp_stream_reset_event,
+            sctp_assoc_reset_event: self.sctp_assoc_reset_event,
+            sctp_stream_change_event: self.sctp_stream_change_event,
+            sctp_send_failure_event_event: self.sctp_send_failure_event_event,
+        }
+    }
+}
+
 
 
 /// FFI binding of sctp functions that the libc crate does not provide

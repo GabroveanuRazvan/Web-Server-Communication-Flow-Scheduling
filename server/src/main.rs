@@ -34,7 +34,7 @@ fn main() -> Result<()> {
           .listen()
           .options();
 
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(10));
     println!("Server started");
 
     for stream in server.incoming(){
