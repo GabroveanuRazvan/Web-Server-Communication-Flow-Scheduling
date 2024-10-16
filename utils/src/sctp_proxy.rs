@@ -25,6 +25,8 @@ impl SctpProxy{
 
         let mut tcp_server =TcpListener::bind((self.tcp_address.to_string(),self.port))?;
 
+        println!("Sctp Proxy started.");
+
         for stream in tcp_server.incoming(){
 
             let stream = stream?;
@@ -52,9 +54,10 @@ impl SctpProxy{
             .events(events)
             .build();
 
-        sctp_client.options();
         sctp_client.connect();
+        sctp_client.options();
 
+        println!("New client");
         println!("{sctp_client:?}");
 
         let mut buffer: Vec<u8> = vec![0;BUFFER_SIZE];
@@ -69,7 +72,7 @@ impl SctpProxy{
                 }
 
                 Err(error) => {
-                    panic!("Tcp Client error: {}", error);
+                    eprintln!("Tcp Client error: {}", error);
                     break;
                 }
 
@@ -83,8 +86,8 @@ impl SctpProxy{
                         panic!("Sctp Client write error: {}", error);
                     }
 
-                    let mut flags = 0;
                     let mut sender_info = new_sctp_sndrinfo();
+
                     match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
                         Err(error)=>{
                             panic!("Sctp read error: {}", error);

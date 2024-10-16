@@ -3,8 +3,8 @@ use std::mem;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
 use crate::sctp_client::SctpStream;
-use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeer, SctpPeerBuilder, safe_sctp_connectx};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo};
+use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt};
 
 
 const BUFFER_SIZE: usize = 2048;
@@ -55,7 +55,6 @@ impl SctpServer{
 
     }
 
-
     /// Method used to accept a new client, stores the address into client_address if specified
     pub fn accept(&self) -> Result<SctpStream>{
 
@@ -81,6 +80,16 @@ impl SctpServer{
         }
 
         self
+    }
+
+    pub fn get_options(&self) -> SctpEventSubscribe{
+        let mut events = SctpEventSubscribe::new();
+
+        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
+            panic!("SCTP getsockopt error: {error}");
+        }
+
+        events
     }
 
     /// Method used to create an Iterator that yields new SctpStreams
@@ -124,67 +133,6 @@ impl SctpServer{
 
 }
 
-
-impl SctpPeer for SctpServer{
-    /// Method used to read data from the socket, stores the client address and info
-    fn read(&mut self, buffer: &mut [u8],
-                client_address: Option<&mut SocketAddrV4>,
-                sender_info: Option<&mut SctpSenderInfo>,
-                flags: &mut i32) ->Result<usize>{
-
-        let mut returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
-
-        let mut client_address_c = match client_address{
-            None => None,
-            Some(_) => {
-                returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
-                Some(&mut returned_sock_addr_c)
-            }
-        };
-
-        match safe_sctp_recvmsg(self.sock_fd, buffer, client_address_c, sender_info, flags){
-            Ok(size) =>{
-
-                // if the client_address was not null, convert the returned c address to rust socketaddress
-
-                if let Some(address) = client_address{
-                    *address = c_to_sock_addr(&returned_sock_addr_c);
-                }
-
-                Ok(size as usize)
-            } ,
-            Err(error) => Err(error),
-        }
-
-    }
-
-    /// Method used to write data to a peer using a designated stream
-    fn write(&mut self, buffer: &mut [u8], num_bytes: usize, to_address: &SocketAddrV4, stream_number: u16, flags: u16, ttl: u32) -> Result<usize>{
-
-        let mut sock_addr_c = sock_addr_to_c(to_address);
-
-        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,0,flags as u32,stream_number,ttl,0){
-            Ok(size) => Ok(size as usize),
-            Err(error) => Err(error),
-        }
-
-    }
-
-    /// Method used to activate the event options of the server
-    fn options(&self) ->&Self{
-
-        let events_ref = events_to_u8(&self.active_events);
-
-        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_ref){
-            panic!("SCTP setsockopt error: {error}");
-        }
-
-        self
-    }
-
-
-}
-
 /// Used to gracefully close the socket descriptor when the server goes out of scope
 impl Drop for SctpServer{
     fn drop(&mut self){
@@ -197,19 +145,19 @@ impl Drop for SctpServer{
 }
 
 
-// Iterator struct for the incoming method of the SctpServer
+/// Iterator struct for the incoming method of the SctpServer
 pub struct Incoming<'a>{
     sctp_listener: &'a SctpServer,
 }
 
-// Create a new wrapper over a SctpServer
+/// Create a new wrapper over a SctpServer
 impl <'a> Incoming<'a>{
     fn new(sctp_listener: &'a SctpServer) -> Self{
         Incoming{sctp_listener}
     }
 }
 
-// Implementation the iterator trait, the next method will call accept and yield the iterator
+/// Implementation the iterator trait, the next method will call accept and yield the iterator
 impl<'a> Iterator for Incoming<'a>{
     type Item = Result<SctpStream>;
 

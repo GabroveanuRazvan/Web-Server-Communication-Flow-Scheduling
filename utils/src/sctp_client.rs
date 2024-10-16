@@ -1,8 +1,8 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{close, recvmsg, IPPROTO_SCTP, MSG_PEEK, SCTP_EVENTS};
-use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
-use crate::sctp_api::{events_to_u8, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
+use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
+use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
 
 #[derive(Debug)]
@@ -125,20 +125,30 @@ impl SctpStream{
     }
 
     /// Method used to activate the event options of the client
+    /// !!! Should always be called AFTER connect call
     pub fn options(&self) ->&Self{
 
-        let events = match self.active_events{
-            Some(events) => events,
-            None => panic!("No sctp stream were specified"),
+        let events_ref = match &self.active_events {
+            Some(events) => events_to_u8(events),
+            None => panic!("No events were specified"),
         };
-
-        let events_ref = events_to_u8(&events);
 
         if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_ref){
             panic!("SCTP setsockopt error: {error}");
         }
 
         self
+    }
+
+    /// Method used to get the active events of the client
+    pub fn get_options(&self) -> SctpEventSubscribe{
+        let mut events = SctpEventSubscribe::new();
+
+        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
+            panic!("SCTP getsockopt error: {error}");
+        }
+
+        events
     }
 
 }

@@ -13,25 +13,6 @@ use super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_res
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
 pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 
-/// Custom traits
-
-/// A sctp peer(server or client) should be able to read or write
-pub trait SctpPeer{
-    fn read(&mut self, buffer: &mut [u8],
-                 client_address: Option<&mut SocketAddrV4>,
-                 sender_info: Option<&mut SctpSenderInfo>,
-                 flags: &mut i32) ->Result<usize>;
-
-    fn write(&mut self,
-             buffer: &mut [u8],
-             num_bytes: usize,
-             to_address: &SocketAddrV4,
-             stream_number: u16,
-             flags: u16, ttl: u32) -> Result<usize>;
-
-    fn options(&self) ->&Self;
-}
-
 pub trait SctpPeerBuilder{
     fn new() -> Self;
     fn socket(self) -> Self;
@@ -383,4 +364,13 @@ pub fn events_to_u8(events: &SctpEventSubscribe) -> &[u8]{
     let size = size_of::<SctpEventSubscribe>();
 
     unsafe{slice::from_raw_parts(ptr, size)}
+}
+
+/// Function that takes the address of the struct SctpEventSubscribe and turns the address into &mut [u8]
+pub fn events_to_u8_mut(events: &mut SctpEventSubscribe) -> &mut [u8] {
+
+    let ptr = events as *mut SctpEventSubscribe as *mut u8;
+    let size = size_of::<SctpEventSubscribe>();
+
+    unsafe { slice::from_raw_parts_mut(ptr, size) }
 }

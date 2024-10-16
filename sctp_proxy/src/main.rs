@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::{io, mem, thread};
 use libc::{sa_family_t, AF_INET};
 use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
-use utils::sctp_api::{safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeer, SctpPeerBuilder};
+use utils::sctp_api::{safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use utils::sctp_proxy::SctpProxyBuilder;
 use io::Result;
 

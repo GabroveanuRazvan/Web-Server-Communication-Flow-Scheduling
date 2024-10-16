@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, IPPROTO_SCTP, SCTP_EVENTS};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
@@ -69,6 +69,17 @@ pub fn safe_setsockopt(socket_fd: i32, level:i32, option_name:i32, option_value:
 
     wrap_result_nonnegative(result)
 
+}
+
+/// Wrapper function used to get the socket options
+pub fn safe_getsockopt(socket_fd: i32, level: i32, option_name: i32, option_value: &mut [u8]) -> Result<i32>{
+    let mut option_length = option_value.len() as u32;
+
+    let result = unsafe{
+        getsockopt(socket_fd,level,option_name,option_value.as_ptr() as *mut c_void,&mut option_length as *mut u32)
+    };
+
+    wrap_result_nonnegative(result)
 }
 
 /// Wrapper function used for recv
