@@ -282,21 +282,34 @@ pub fn safe_sctp_sendmsg(
     let message_size = msg_size as size_t;
     let address_size = size_of::<SockAddrIn>() as socklen_t;
 
-    // call the unsafe FFI
-    let result = unsafe{
+    let result = match msg_size{
+        0 => unsafe{
+            sctp_sendmsg(sock_fd,
+                         ptr::null() as *const c_void,
+                         0,
+                         ptr::null() as *const sockaddr_in,
+                         0,
+                         0,
+                         0,
+                         stream_number,
+                         0,
+                         0
+            )
+        }
 
-        sctp_sendmsg(sock_fd,
-                     msg.as_ptr() as *const c_void,
-                     message_size,
-                     to_address,
-                     address_size,
-                     payload_protocol_id,
-                     flags,
-                     stream_number,
-                     time_to_live,
-                     context
-        )
-
+        msg_size => unsafe{
+            sctp_sendmsg(sock_fd,
+                         msg.as_ptr() as *const c_void,
+                         message_size,
+                         to_address,
+                         address_size,
+                         payload_protocol_id,
+                         flags,
+                         stream_number,
+                         time_to_live,
+                         context
+            )
+        }
     };
 
     // return Ok or Err based on the output

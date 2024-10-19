@@ -113,6 +113,20 @@ impl SctpStream{
 
     }
 
+    /// Method used to write one null terminated message to mark end of writing/reading to fellow peer
+    pub fn write_null(&mut self,stream_number: u16,flags: u32) -> Result<usize>{
+
+        let buffer: [u8;5] = [0;5];
+
+        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+
+        match safe_sctp_sendmsg(self.sock_fd,&buffer,1,&mut sock_addr_c,0,flags,stream_number,self.ttl,0){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
+
+    }
+
     /// Method used to peek into the socket buffer
     pub fn peek(&self, buffer: &mut[u8]) -> Result<usize>{
 

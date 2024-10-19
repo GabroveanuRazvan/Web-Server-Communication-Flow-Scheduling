@@ -64,6 +64,7 @@ impl SctpProxy{
 
         loop{
 
+            println!("Tcp listener waiting for messages...");
             // the tcp stream waits for a request
             match stream.read(&mut buffer){
 
@@ -95,7 +96,7 @@ impl SctpProxy{
                         // the sctp-stream waits to get a response
                         match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
                             // end message received
-                            Ok(0) => {
+                            Ok(1) => {
                                 println!("Sctp client ended processing");
                                 break;
                             }

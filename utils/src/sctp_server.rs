@@ -140,7 +140,7 @@ impl SctpServer{
             }
 
             // end message
-            match stream.write(&mut response_body,0,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            match stream.write_null(sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
