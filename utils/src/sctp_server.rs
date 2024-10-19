@@ -4,10 +4,10 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
 use crate::sctp_client::SctpStream;
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo};
+use super::http_parsers::{basic_http_response, parse_http_request, response_to_string};
 
-
-const BUFFER_SIZE: usize = 2048;
+const BUFFER_SIZE: usize = 4096;
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -105,7 +105,7 @@ impl SctpServer{
 
         let mut buffer: Vec<u8> = vec![0; BUFFER_SIZE];
         let mut client_address : SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
-        let mut sender_info: SctpSenderInfo = unsafe { mem::zeroed() };
+        let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
 
         loop{
             let bytes_read = stream.read(&mut buffer,Some(&mut sender_info),None)?;
@@ -115,16 +115,36 @@ impl SctpServer{
             }
 
             println!("Read {bytes_read} bytes");
-
             println!("Client address: {}", stream.local_address());
-
             debug_sctp_sndrcvinfo(&sender_info);
-            println!("{:?}",String::from_utf8(buffer.clone()).unwrap());
 
-            match stream.write(&mut buffer,bytes_read,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            let request = parse_http_request(&String::from_utf8(buffer.clone()).unwrap());
+
+            println!("{request:?}");
+
+            let mut response_body = "<h1>Hello world</h1>".to_string().into_bytes();
+            let mut response_body_size = response_body.len();
+
+            let mut response_bytes = response_to_string(&basic_http_response(response_body_size)).into_bytes();
+            let mut response_size = response_bytes.len();
+
+
+            match stream.write(&mut response_bytes,response_size,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
+
+            match stream.write(&mut response_body,response_body_size,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+                Ok(bytes) => println!("Wrote {bytes}"),
+                Err(e) => println!("Write Error: {:?}",e)
+            }
+
+            // end message
+            match stream.write(&mut response_body,0,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+                Ok(bytes) => println!("Wrote {bytes}"),
+                Err(e) => println!("Write Error: {:?}",e)
+            }
+
         }
 
 

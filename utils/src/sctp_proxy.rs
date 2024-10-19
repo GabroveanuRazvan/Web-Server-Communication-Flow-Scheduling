@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder};
 use crate::sctp_client::SctpStreamBuilder;
 use io::Result;
-use std::io::Read;
+use std::io::{Read, Write};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 
 const BUFFER_SIZE: usize = 2048;
@@ -64,6 +64,7 @@ impl SctpProxy{
 
         loop{
 
+            // the tcp stream waits for a request
             match stream.read(&mut buffer){
 
                 Ok(0) => {
@@ -76,28 +77,45 @@ impl SctpProxy{
                     break;
                 }
 
+                // request received
                 Ok(n) => {
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
 
                     println!("Got Bytes: {n}");
                     println!("Tcp Client received message: {}", received_message);
 
+                    // send the request to server via sctp-stream
                     if let Err(error) = sctp_client.write(&mut buffer[..],n,0,0){
                         panic!("Sctp Client write error: {}", error);
                     }
 
                     let mut sender_info = new_sctp_sndrinfo();
 
-                    match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
-                        Err(error)=>{
-                            panic!("Sctp read error: {}", error);
-                        }
+                    loop{
+                        // the sctp-stream waits to get a response
+                        match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                            // end message received
+                            Ok(0) => {
+                                println!("Sctp client ended processing");
+                                break;
+                            }
 
-                        Ok(n) =>{
-                            debug_sctp_sndrcvinfo(&sender_info);
-                            println!("Sctp received message: {}", String::from_utf8_lossy(&buffer[..n]));
+                            Err(error)=>{
+                                panic!("Sctp read error: {}", error);
+                            }
+
+                            // response received
+                            Ok(n) =>{
+                                debug_sctp_sndrcvinfo(&sender_info);
+                                // write into tcp stream
+                                stream.write(&buffer[..n]);
+                                println!("Sctp received message: {}", String::from_utf8_lossy(&buffer[..n]));
+                            }
                         }
                     }
+
+
+
                 }
 
             }
