@@ -102,7 +102,7 @@ impl SctpStream{
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self, buffer: &mut [u8], num_bytes: usize, stream_number: u16, flags: u32) -> Result<usize>{
+    pub fn write(&mut self, buffer: &[u8], num_bytes: usize, stream_number: u16, flags: u32) -> Result<usize>{
 
         let mut sock_addr_c = sock_addr_to_c(&self.local_address());
 
@@ -110,6 +110,31 @@ impl SctpStream{
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
+
+    }
+    /// Method used to write all data to a peer using a designated stream
+    pub fn write_all(&mut self, buffer: &[u8], stream_number: u16, flags: u32) -> Result<usize>{
+        let num_bytes = buffer.len();
+
+        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+
+        match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,0,flags,stream_number,self.ttl,0){
+            Ok(size) => Ok(size as usize),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Method used to write the buffer in a loop using chunks of chunk_size bytes
+    pub fn write_chunked(&mut self, buffer: &[u8],chunk_size: usize, stream_number: u16, flags: u32)-> Result<usize>{
+        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+
+        let mut total_bytes = 0usize;
+
+        for chunk in buffer.chunks(chunk_size) {
+            total_bytes += self.write_all(chunk,stream_number,flags)?;
+        }
+
+        Ok(total_bytes)
 
     }
 

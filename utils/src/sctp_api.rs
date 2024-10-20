@@ -12,7 +12,7 @@ use super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_res
 /// Macros used in sctp_bindx function
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
 pub const SCTP_BINDX_REM_ADDR: c_int = 2;
-
+pub const MAX_STREAM_NUMBER: u16 = 10;
 pub trait SctpPeerBuilder{
     fn new() -> Self;
     fn socket(self) -> Self;
@@ -228,8 +228,7 @@ pub fn safe_sctp_recvmsg(
 
 ) -> Result<i32>{
 
-    // read with one less character so that we are assured that there will pe a null character in the end
-    let message_size = msg.len()-1 as size_t;
+    let message_size = msg.len() as size_t;
 
     // get a tuple of pointers to the socket address and its length or null pointers if they are not specified
     let from_address_data = if let Some(address) = from_address{

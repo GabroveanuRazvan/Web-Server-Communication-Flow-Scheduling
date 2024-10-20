@@ -1,12 +1,12 @@
 use std::{io, mem};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder};
-use crate::sctp_client::SctpStreamBuilder;
+use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
+use crate::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 
-const BUFFER_SIZE: usize = 2048;
+const BUFFER_SIZE: usize = 4096;
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
@@ -39,7 +39,7 @@ impl SctpProxy{
     }
 
     /// Client handler method
-    fn handle_client(&self, mut stream: TcpStream) {
+    fn handle_client(&self, mut tcp_stream: TcpStream) {
 
         // create a new sctp client
 
@@ -57,6 +57,9 @@ impl SctpProxy{
         sctp_client.connect();
         sctp_client.options();
 
+        // used to RR over the streams
+        let mut stream_number = 0u16;
+
         println!("New client");
         println!("{sctp_client:?}");
 
@@ -66,7 +69,7 @@ impl SctpProxy{
 
             println!("Tcp listener waiting for messages...");
             // the tcp stream waits for a request
-            match stream.read(&mut buffer){
+            match tcp_stream.read(&mut buffer){
 
                 Ok(0) => {
                     println!("Tcp client closed");
@@ -86,9 +89,12 @@ impl SctpProxy{
                     println!("Tcp Client received message: {}", received_message);
 
                     // send the request to server via sctp-stream
-                    if let Err(error) = sctp_client.write(&mut buffer[..],n,0,0){
+                    if let Err(error) = sctp_client.write(&mut buffer[..],n,stream_number,0){
                         panic!("Sctp Client write error: {}", error);
                     }
+
+                    // simple RR over the streams
+                    stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
 
                     let mut sender_info = new_sctp_sndrinfo();
 
@@ -109,7 +115,7 @@ impl SctpProxy{
                             Ok(n) =>{
                                 debug_sctp_sndrcvinfo(&sender_info);
                                 // write into tcp stream
-                                stream.write(&buffer[..n]);
+                                tcp_stream.write(&buffer[..n]);
                                 println!("Sctp received message: {}", String::from_utf8_lossy(&buffer[..n]));
                             }
                         }

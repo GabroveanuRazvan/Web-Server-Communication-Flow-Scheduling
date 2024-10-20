@@ -1,14 +1,18 @@
+use std::env::{current_dir, set_current_dir};
+use std::fs::File;
 use std::io::{Error, Read, Result};
 use std::mem;
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::path::Path;
 use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
+use memmap2::Mmap;
 use crate::sctp_client::SctpStream;
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
 use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo};
 use super::http_parsers::{basic_http_response, parse_http_request, response_to_string};
 
 const BUFFER_SIZE: usize = 4096;
-
+const CHUNK_SIZE: usize = 1024;
 #[derive(Debug)]
 pub struct SctpServer {
     sock_fd: i32,
@@ -104,7 +108,6 @@ impl SctpServer{
         println!("New client");
 
         let mut buffer: Vec<u8> = vec![0; BUFFER_SIZE];
-        let mut client_address : SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0);
         let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
 
         loop{
@@ -120,13 +123,24 @@ impl SctpServer{
 
             let request = parse_http_request(&String::from_utf8(buffer.clone()).unwrap());
 
-            println!("{request:?}");
+            let mut method = request.method().to_string();
+            let mut path = request.uri().path().to_string();
 
-            let mut response_body = "<h1>Hello world</h1>".to_string().into_bytes();
-            let mut response_body_size = response_body.len();
+            if method == "GET" && path == "/"{
+                path = "./index.html".to_string();
+            }
+            else{
+                path = "./404.html".to_string();
+            }
+
+            let file = File::open(path)?;
+
+            let file_buffer = unsafe{Mmap::map(&file)?};
+
+            let response_body_size = file_buffer.len();
 
             let mut response_bytes = response_to_string(&basic_http_response(response_body_size)).into_bytes();
-            let mut response_size = response_bytes.len();
+            let response_size = response_bytes.len();
 
 
             match stream.write(&mut response_bytes,response_size,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
@@ -134,7 +148,7 @@ impl SctpServer{
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
-            match stream.write(&mut response_body,response_body_size,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            match stream.write_chunked(&file_buffer,CHUNK_SIZE,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
@@ -207,6 +221,15 @@ impl SctpServerBuilder{
         self
     }
 
+    /// Sets the working directory to path
+    pub fn path(self, path: &Path) -> Self{
+        match set_current_dir(path){
+            Ok(dir) => self,
+            Err(error) => {
+                panic!("Error while setting working directory: {error}");
+            }
+        }
+    }
     /// Builds the server based on the given information
     pub fn build(self) -> SctpServer{
 
@@ -218,6 +241,8 @@ impl SctpServerBuilder{
             active_events: self.active_events,
         }
     }
+
+
 }
 
 impl SctpPeerBuilder for SctpServerBuilder {

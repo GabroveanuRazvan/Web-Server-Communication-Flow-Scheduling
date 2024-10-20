@@ -7,3 +7,4 @@ edition = "2021"
 libc = "0.2.159"
 utils = {path = "../utils"}
 http = "1.1.0"
+memmap2 = "0.9.5"
