@@ -1,7 +1,7 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{close, recvmsg, IPPROTO_SCTP, MSG_PEEK, SCTP_EVENTS};
-use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
+use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
 
@@ -196,15 +196,17 @@ impl SctpStream{
 impl Drop for SctpStream{
     fn drop(&mut self){
 
-        unsafe{close(self.sock_fd);}
-        println!("Sctp client closed");
+        match safe_close(self.sock_fd){
+            Ok(_) =>  println!("Sctp stream closed"),
+            Err(error) => panic!("Server closed unexpectedly: {error}")
+        }
 
     }
 
 }
 
-/// Builder pattern for sctp stream used when the stream acts as a client that will call connect
 
+/// Builder pattern for sctp stream used when the stream acts as a client that will call connect
 
 pub struct SctpStreamBuilder{
     sock_fd: i32,

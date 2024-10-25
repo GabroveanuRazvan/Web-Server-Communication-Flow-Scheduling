@@ -36,12 +36,13 @@ fn main() -> Result<()> {
           .listen()
           .options();
 
-    thread::sleep(Duration::from_secs(5));
-    println!("Server started");
+    println!("Server started and listening on {IPV4:?}:{PORT}");
+    println!("Current directory: {PATH_STR}");
+    println!("Connect by: http://127.0.0.1:{PORT}");
 
     for stream in server.incoming(){
 
-        let mut stream = stream.unwrap();
+        let stream = stream.unwrap();
 
         SctpServer::handle_client(stream)?
     }

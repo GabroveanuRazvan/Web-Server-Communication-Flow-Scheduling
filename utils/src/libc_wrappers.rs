@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, IPPROTO_SCTP, SCTP_EVENTS};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt,close};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
@@ -92,6 +92,16 @@ pub fn safe_recv(socket_fd: i32, msg: &mut [u8],message_size: usize,flags: i32) 
     wrap_result_nonnegative(result)
 }
 
+/// Wrapper function for close
+pub fn safe_close(socket_fd: i32) -> Result<i32>{
+
+    let result = unsafe{
+        close(socket_fd)
+    };
+
+    wrap_result_nonnegative(result)
+}
+
 /// Function that extracts errno safely
 pub fn get_errno() -> i32{
 
@@ -177,6 +187,7 @@ pub fn new_sctp_sndrinfo() -> SctpSenderInfo{
 }
 
 
+/// Function that transforms a C sock_addr_in into a rust SocketAddrV4
 pub fn c_to_sock_addr(addr: &SockAddrIn) -> SocketAddrV4{
 
     // get the native byte order of the ip adddress
@@ -189,6 +200,7 @@ pub fn c_to_sock_addr(addr: &SockAddrIn) -> SocketAddrV4{
     SocketAddrV4::new(ip, port)
 }
 
+/// Function that transforms a rust SocketAddrV4 into a C sock_addr_in
 pub fn sock_addr_to_c(addr: &SocketAddrV4) -> SockAddrIn{
     // get the octets and port
     let ip_octets = addr.ip().octets();
@@ -212,7 +224,7 @@ pub fn debug_sockaddr(sockaddr: &SockAddrIn){
     println!("Sockaddr(family:{}, port:{}, address: {})",sockaddr.sin_family,sockaddr.sin_port.to_be(),Ipv4Addr::from(sockaddr.sin_addr.s_addr.to_be()));
 }
 pub fn debug_sctp_sndrcvinfo(info: &SctpSenderInfo) {
-    println!("SCTP Send/Receive Info:");
+    println!("\nSCTP Send/Receive Info:");
     println!("  Stream: {}", info.sinfo_stream);
     println!("  SSN: {}", info.sinfo_ssn);
     println!("  Flags: {}", info.sinfo_flags);
@@ -220,5 +232,5 @@ pub fn debug_sctp_sndrcvinfo(info: &SctpSenderInfo) {
     println!("  Context: {}", info.sinfo_context);
     println!("  TSN: {}", info.sinfo_tsn);
     println!("  Cumulative TSN: {}", info.sinfo_cumtsn);
-    println!("  Association ID: {}", info.sinfo_assoc_id);
+    println!("  Association ID: {}\n", info.sinfo_assoc_id);
 }

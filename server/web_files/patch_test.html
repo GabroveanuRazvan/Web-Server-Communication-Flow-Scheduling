@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Test PATCH Request</title>
+</head>
+<body>
+    <h1>Test PATCH Request</h1>
+
+    <form id="patchForm">
+        <label for="field">Field to Update:</label>
+        <select id="field" name="field" required>
+            <option value="title">Title</option>
+            <option value="content">Content</option>
+            <option value="author">Author</option>
+        </select><br><br>
+
+        <label for="value">New Value:</label>
+        <input type="text" id="value" name="value" required><br><br>
+
+        <button type="submit">Send PATCH Request</button>
+    </form>
+
+    <p id="response"></p>
+
+    <script>
+        document.getElementById('patchForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Previne reîncărcarea paginii
+
+            // Preia valorile din formular
+            const field = document.getElementById('field').value;
+            const value = document.getElementById('value').value;
+
+            // Creează un obiect cu câmpul de actualizat
+            const data = {};
+            data[field] = value;
+
+            // Execută cererea PATCH folosind Fetch API
+            fetch('http://localhost:3000/patch-test', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('response').innerText = "Răspuns: " + JSON.stringify(data);
+            })
+            .catch(error => {
+                document.getElementById('response').innerText = "Eroare: " + error;
+            });
+        });
+    </script>
+</body>
+</html>

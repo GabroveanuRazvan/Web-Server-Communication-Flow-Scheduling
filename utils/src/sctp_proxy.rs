@@ -25,7 +25,9 @@ impl SctpProxy{
 
         let mut tcp_server =TcpListener::bind((self.tcp_address.to_string(),self.port))?;
 
-        println!("Sctp Proxy started.");
+        println!("Sctp Proxy started and listening on {:?}:{}",self.tcp_address,self.port);
+        println!("Messages redirected to: {:?}:{}",self.sctp_address,self.port);
+        println!("Connect by: http://127.0.0.1:{}",self.port);
 
         for stream in tcp_server.incoming(){
 
@@ -86,7 +88,7 @@ impl SctpProxy{
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
 
                     println!("Got Bytes: {n}");
-                    println!("Tcp Client received message: {}", received_message);
+                    println!("Tcp Client received message: \n {}", received_message);
 
                     // send the request to server via sctp-stream
                     if let Err(error) = sctp_client.write(&mut buffer[..],n,stream_number,0){
@@ -116,7 +118,7 @@ impl SctpProxy{
                                 debug_sctp_sndrcvinfo(&sender_info);
                                 // write into tcp stream
                                 tcp_stream.write(&buffer[..n]);
-                                println!("Sctp received message: {}", String::from_utf8_lossy(&buffer[..n]));
+                                println!("Sctp received message: \n {}", String::from_utf8_lossy(&buffer[..n]));
                             }
                         }
                     }

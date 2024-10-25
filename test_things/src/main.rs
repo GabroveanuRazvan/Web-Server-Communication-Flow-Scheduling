@@ -1,35 +1,86 @@
-use std::env;
-use memmap2::Mmap;
-use std::fs::File;
-use std::io::Result;
-use std::path::Path;
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::path::{Component, Components, Path, PathBuf};
 
-fn main() -> Result<()> {
+fn main() {
 
-    let current_dir = env::current_dir()?;
-    println!("Current directory: {}", current_dir.display());
+    let mut path = Path::new("/web/dir1/file1.txt");
+    let parh2 = Path::new("/web/dir1/file2.txt");
+    let mut trie = Trie::new();
 
+    trie.insert(path);
+    trie.insert(parh2);
 
+    println!("{:?}",trie);
 
-    // Deschidem fișierul
-    let file = File::open("./web_files/ceva.html")?;
+}
 
-    // Mapăm fișierul în memorie
-    let mmap = unsafe { Mmap::map(&file)? };
+#[derive(Debug)]
+struct TrieNode {
+    current_dir: Box<String>,
+    children: HashMap<Box<String>,TrieNode>,
+    is_file: bool,
+}
 
-    println!("Mmap content: {:?}", mmap);
+impl TrieNode{
+    fn new(current_dir: Box<String>) -> Self{
+        Self{
+            current_dir,
+            children: HashMap::new(),
+            is_file: false,
+        }
+    }
+}
 
-    // Citim conținutul fișierului din memoria mapată
-    let file_content = std::str::from_utf8(&mmap).expect("Fisierul nu este un UTF-8 valid");
-    println!("{}", file_content);
+#[derive(Debug)]
+struct Trie{
+    root: TrieNode,
+}
 
-    let chunk_size = 5;
-
-    for chunk in mmap.chunks(chunk_size) {
-        println!("Chunk size: {}", chunk.len());
-        println!("Chunk content: {:?}", String::from_utf8_lossy(&chunk));
+impl Trie{
+    pub fn new() ->Self{
+        Self{
+            root: TrieNode::new(Box::new("/".to_string())),
+        }
     }
 
+    pub fn insert(&mut self, path: &Path){
 
-    Ok(())
+        let mut current_node = &mut self.root;
+
+        for chunk in path.components(){
+
+            if let Component::Normal(dir) = chunk{
+
+                let dir = Box::new(dir.to_string_lossy().into_owned());
+                let entry = current_node.children.entry(dir.clone()).or_insert(TrieNode::new(dir.clone()));
+                current_node = current_node.children.get_mut(&dir).unwrap();
+
+            }
+
+        }
+
+        current_node.is_file = true;
+
+    }
+
+    pub fn find(&mut self,path: &Path) -> bool{
+
+        let mut current_node = &mut self.root;
+
+        for chunk in path.components(){
+            if let Component::Normal(dir) = chunk{
+                let dir = Box::new(dir.to_string_lossy().into_owned());
+
+                match current_node.children.get_mut(&dir){
+                    None => return false,
+                    Some(node) => current_node = node,
+                }
+
+            }
+        }
+
+        true
+
+    }
 }

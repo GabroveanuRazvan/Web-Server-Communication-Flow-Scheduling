@@ -8,7 +8,7 @@ use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t}
 use memmap2::Mmap;
 use crate::sctp_client::SctpStream;
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
-use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo};
+use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo, safe_close};
 use super::http_parsers::{basic_http_response, parse_http_request, response_to_string};
 
 const BUFFER_SIZE: usize = 4096;
@@ -32,9 +32,7 @@ impl SctpServer{
         // convert all ipv4 addresses to C SockAddrIn
         for address in &self.addresses{
 
-            let mut current_socket_address: SockAddrIn = new_sock_addr_in(self.port,address.clone());
-
-            debug_sockaddr(&current_socket_address);
+            let current_socket_address: SockAddrIn = new_sock_addr_in(self.port,address.clone());
 
             socket_addresses.push(current_socket_address);
 
@@ -68,7 +66,7 @@ impl SctpServer{
         // a new SockAddrIn where the client data will be stored
         let mut returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
 
-        let mut sock_fd = safe_accept(self.sock_fd,Some(&mut returned_sock_addr_c),Some(&mut dummy_size))?;
+        let sock_fd = safe_accept(self.sock_fd,Some(&mut returned_sock_addr_c),Some(&mut dummy_size))?;
 
         // create a new stream and its data
         Ok(SctpStream::new(sock_fd,c_to_sock_addr(&returned_sock_addr_c)))
@@ -105,7 +103,8 @@ impl SctpServer{
 
     pub fn handle_client(mut stream: SctpStream) -> Result<()>{
 
-        println!("New client");
+        println!("New client!");
+        println!("Client address: {}", stream.local_address());
 
         let mut buffer: Vec<u8> = vec![0; BUFFER_SIZE];
         let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
@@ -118,7 +117,7 @@ impl SctpServer{
             }
 
             println!("Read {bytes_read} bytes");
-            println!("Client address: {}", stream.local_address());
+
             debug_sctp_sndrcvinfo(&sender_info);
 
             let request = parse_http_request(&String::from_utf8(buffer.clone()).unwrap());
@@ -126,8 +125,15 @@ impl SctpServer{
             let mut method = request.method().to_string();
             let mut path = request.uri().path().to_string();
 
-            if method == "GET" && path == "/"{
-                path = "./index.html".to_string();
+            if method == "GET"{
+
+                path = match path.as_str(){
+                    "/" => "./index.html".to_string(),
+                    _ => {
+                        String::from(".") + &path
+                    }
+                }
+
             }
             else{
                 path = "./404.html".to_string();
@@ -171,8 +177,10 @@ impl SctpServer{
 impl Drop for SctpServer{
     fn drop(&mut self){
 
-        unsafe{close(self.sock_fd);}
-        println!("Sctp Server closed");
+        match safe_close(self.sock_fd){
+            Ok(_) =>  println!("Sctp Server closed"),
+            Err(error) => panic!("Server closed unexpectedly: {error}")
+        }
 
     }
 
@@ -294,7 +302,7 @@ impl SctpPeerBuilder for SctpServerBuilder {
     }
 
     /// Sets the events that the server will be subscribed to
-    fn events(mut self, events: SctpEventSubscribe) -> Self{
+    fn events(mut self , events: SctpEventSubscribe) -> Self{
 
         self.active_events = events;
         self
