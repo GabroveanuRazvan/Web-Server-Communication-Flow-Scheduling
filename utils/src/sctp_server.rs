@@ -122,6 +122,8 @@ impl SctpServer{
 
             let request = parse_http_request(&String::from_utf8(buffer.clone()).unwrap());
 
+            println!("{} {}",request.method().to_string(),request.uri().to_string());
+
             let mut method = request.method().to_string();
             let mut path = request.uri().path().to_string();
 
@@ -148,19 +150,20 @@ impl SctpServer{
             let mut response_bytes = response_to_string(&basic_http_response(response_body_size)).into_bytes();
             let response_size = response_bytes.len();
 
-
-            match stream.write(&mut response_bytes,response_size,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            // send the header of the html response
+            match stream.write(&mut response_bytes,response_size,0,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
-            match stream.write_chunked(&file_buffer,CHUNK_SIZE,sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            // send the body of the response
+            match stream.write_chunked(&file_buffer,CHUNK_SIZE,0,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
-            // end message
-            match stream.write_null(sender_info.sinfo_stream,sender_info.sinfo_flags as u32){
+            // send a null character to mark the end of the message
+            match stream.write_null(0,sender_info.sinfo_flags as u32){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }

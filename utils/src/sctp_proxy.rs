@@ -33,7 +33,23 @@ impl SctpProxy{
 
             let stream = stream?;
 
-            self.handle_client(stream);
+            // create a new sctp client
+
+            let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
+
+            let mut sctp_client = SctpStreamBuilder::new()
+                .socket()
+                .port(self.port)
+                .address(self.sctp_address)
+                .addresses(self.sctp_peer_addresses.clone())
+                .ttl(0)
+                .events(events)
+                .build();
+
+            sctp_client.connect();
+            sctp_client.options();
+
+            Self::handle_client(stream,sctp_client);
 
         }
 
@@ -41,29 +57,12 @@ impl SctpProxy{
     }
 
     /// Client handler method
-    fn handle_client(&self, mut tcp_stream: TcpStream) {
-
-        // create a new sctp client
-
-        let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
-
-        let mut sctp_client = SctpStreamBuilder::new()
-            .socket()
-            .port(self.port)
-            .address(self.sctp_address)
-            .addresses(self.sctp_peer_addresses.clone())
-            .ttl(0)
-            .events(events)
-            .build();
-
-        sctp_client.connect();
-        sctp_client.options();
+    fn handle_client(mut tcp_stream: TcpStream, mut sctp_client: SctpStream) {
 
         // used to RR over the streams
         let mut stream_number = 0u16;
 
         println!("New client");
-        println!("{sctp_client:?}");
 
         let mut buffer: Vec<u8> = vec![0;BUFFER_SIZE];
 
@@ -88,7 +87,7 @@ impl SctpProxy{
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
 
                     println!("Got Bytes: {n}");
-                    println!("Tcp Client received message: \n {}", received_message);
+                    println!("Tcp Client received message:\n{}", received_message);
 
                     // send the request to server via sctp-stream
                     if let Err(error) = sctp_client.write(&mut buffer[..],n,stream_number,0){
@@ -106,6 +105,9 @@ impl SctpProxy{
                             // end message received
                             Ok(1) => {
                                 println!("Sctp client ended processing");
+                                // let mut peek_buffer = vec![0u8;BUFFER_SIZE];
+                                // sctp_client.peek(&mut peek_buffer);
+                                // println!("Sctp peek buffer:\n{}", String::from_utf8_lossy(&peek_buffer[..]));
                                 break;
                             }
 
@@ -115,10 +117,11 @@ impl SctpProxy{
 
                             // response received
                             Ok(n) =>{
+
                                 debug_sctp_sndrcvinfo(&sender_info);
                                 // write into tcp stream
                                 tcp_stream.write(&buffer[..n]);
-                                println!("Sctp received message: \n {}", String::from_utf8_lossy(&buffer[..n]));
+                                println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
                             }
                         }
                     }

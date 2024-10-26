@@ -1,6 +1,6 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{close, recvmsg, IPPROTO_SCTP, MSG_PEEK, SCTP_EVENTS};
+use libc::{close, recvmsg, IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
 use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
@@ -157,7 +157,7 @@ impl SctpStream{
 
         let message_size = buffer.len();
 
-        match safe_recv(self.sock_fd,buffer,message_size,MSG_PEEK){
+        match safe_recv(self.sock_fd,buffer,message_size,MSG_PEEK | MSG_DONTWAIT){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
