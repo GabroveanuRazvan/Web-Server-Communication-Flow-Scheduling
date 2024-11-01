@@ -12,7 +12,7 @@ use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_list
 use super::http_parsers::{basic_http_response, parse_http_request, response_to_string};
 
 const BUFFER_SIZE: usize = 4096;
-const CHUNK_SIZE: usize = 1024;
+const CHUNK_SIZE: usize = 2048;
 #[derive(Debug)]
 pub struct SctpServer {
     sock_fd: i32,
@@ -151,19 +151,19 @@ impl SctpServer{
             let response_size = response_bytes.len();
 
             // send the header of the html response
-            match stream.write(&mut response_bytes,response_size,0,sender_info.sinfo_flags as u32){
+            match stream.write(&mut response_bytes,response_size,0,2){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
             // send the body of the response
-            match stream.write_chunked(&file_buffer,CHUNK_SIZE,0,sender_info.sinfo_flags as u32){
+            match stream.write_chunked(&file_buffer,CHUNK_SIZE,0,2){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
             // send a null character to mark the end of the message
-            match stream.write_null(0,sender_info.sinfo_flags as u32){
+            match stream.write_null(0,2){
                 Ok(bytes) => println!("Wrote {bytes}"),
                 Err(e) => println!("Write Error: {:?}",e)
             }
@@ -235,7 +235,7 @@ impl SctpServerBuilder{
     /// Sets the working directory to path
     pub fn path(self, path: &Path) -> Self{
         match set_current_dir(path){
-            Ok(dir) => self,
+            Ok(_) => self,
             Err(error) => {
                 panic!("Error while setting working directory: {error}");
             }

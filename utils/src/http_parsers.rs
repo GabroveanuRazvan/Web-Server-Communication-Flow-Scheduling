@@ -73,6 +73,7 @@ pub fn basic_http_response(content_length: usize) -> Response<()>{
         .status(StatusCode::OK)
         .header("Content-Type", "text/html")
         .header("Connection", "keep-alive")
+        .header("Keep-Alive", "timeout=5,max=1")
         .header("Content-Length", content_length.to_string())
         .body(())
         .unwrap()

@@ -1,4 +1,4 @@
-use std::{io, mem};
+use std::{io, mem,thread};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp_client::{SctpStream, SctpStreamBuilder};
@@ -49,7 +49,10 @@ impl SctpProxy{
             sctp_client.connect();
             sctp_client.options();
 
-            Self::handle_client(stream,sctp_client);
+            //TODO thread pool
+
+                Self::handle_client(stream,sctp_client)
+
 
         }
 
@@ -78,8 +81,7 @@ impl SctpProxy{
                 }
 
                 Err(error) => {
-                    eprintln!("Tcp Client error: {}", error);
-                    break;
+                    panic!("Tcp Client error: {}", error);
                 }
 
                 // request received
@@ -105,9 +107,6 @@ impl SctpProxy{
                             // end message received
                             Ok(1) => {
                                 println!("Sctp client ended processing");
-                                // let mut peek_buffer = vec![0u8;BUFFER_SIZE];
-                                // sctp_client.peek(&mut peek_buffer);
-                                // println!("Sctp peek buffer:\n{}", String::from_utf8_lossy(&peek_buffer[..]));
                                 break;
                             }
 

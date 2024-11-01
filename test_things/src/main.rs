@@ -1,86 +1,44 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fs::File;
 use std::path::{Component, Components, Path, PathBuf};
+use std::rc::Rc;
+use std::thread;
+use std::time::Duration;
+use indexmap::IndexMap;
+use utils::thread_pool;
+use utils::thread_pool::ThreadPool;
+use utils::lru_cache::FileCache;
+
+use http::request::Request;
+use http::Uri;
+use memmap2::Mmap;
 
 fn main() {
 
-    let mut path = Path::new("/web/dir1/file1.txt");
-    let parh2 = Path::new("/web/dir1/file2.txt");
-    let mut trie = Trie::new();
+    let mut cache = FileCache::new(3);
 
-    trie.insert(path);
-    trie.insert(parh2);
+    let path = "./Cargo.toml".to_string();
 
-    println!("{:?}",trie);
+    let file = File::open(Path::new(&path)).unwrap();
+
+    let mmap = unsafe{Mmap::map(&file).unwrap()};
+
+    cache.insert(path.clone(),mmap);
+    cache.insert("./web_files/ceva.html".to_string(),
+                 unsafe{Mmap::map(&File::open(Path::new(&"./web_files/ceva.html".to_string())).unwrap()).unwrap()}
+    );
+    cache.insert("./web_files/hello.html".to_string(),
+                 unsafe{Mmap::map(&File::open(Path::new(&"./web_files/hello.html".to_string())).unwrap()).unwrap()}
+    );
+
+    cache.insert("./nigga".to_string(),unsafe{Mmap::map(&File::open(Path::new(&"./web_files/hello.html".to_string())).unwrap()).unwrap()});
+
+    let a = cache.get(&"./web_files/ceva.html".to_string());
+    println!("{:?}",cache);
+
 
 }
 
-#[derive(Debug)]
-struct TrieNode {
-    current_dir: Box<String>,
-    children: HashMap<Box<String>,TrieNode>,
-    is_file: bool,
-}
 
-impl TrieNode{
-    fn new(current_dir: Box<String>) -> Self{
-        Self{
-            current_dir,
-            children: HashMap::new(),
-            is_file: false,
-        }
-    }
-}
 
-#[derive(Debug)]
-struct Trie{
-    root: TrieNode,
-}
-
-impl Trie{
-    pub fn new() ->Self{
-        Self{
-            root: TrieNode::new(Box::new("/".to_string())),
-        }
-    }
-
-    pub fn insert(&mut self, path: &Path){
-
-        let mut current_node = &mut self.root;
-
-        for chunk in path.components(){
-
-            if let Component::Normal(dir) = chunk{
-
-                let dir = Box::new(dir.to_string_lossy().into_owned());
-                let entry = current_node.children.entry(dir.clone()).or_insert(TrieNode::new(dir.clone()));
-                current_node = current_node.children.get_mut(&dir).unwrap();
-
-            }
-
-        }
-
-        current_node.is_file = true;
-
-    }
-
-    pub fn find(&mut self,path: &Path) -> bool{
-
-        let mut current_node = &mut self.root;
-
-        for chunk in path.components(){
-            if let Component::Normal(dir) = chunk{
-                let dir = Box::new(dir.to_string_lossy().into_owned());
-
-                match current_node.children.get_mut(&dir){
-                    None => return false,
-                    Some(node) => current_node = node,
-                }
-
-            }
-        }
-
-        true
-
-    }
-}
