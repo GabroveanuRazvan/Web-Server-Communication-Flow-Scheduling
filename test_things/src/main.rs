@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{remove_dir_all, File};
+use std::io::{Read, Write};
 use std::path::{Component, Components, Path, PathBuf};
 use std::rc::Rc;
-use std::thread;
+use std::{fs, io, thread};
+use std::thread::{sleep, Thread};
 use std::time::Duration;
 use indexmap::IndexMap;
 use utils::thread_pool;
@@ -14,31 +16,32 @@ use http::request::Request;
 use http::Uri;
 use memmap2::Mmap;
 
-fn main() {
+use std::fs::{create_dir,remove_dir,OpenOptions,remove_file};
 
-    let mut cache = FileCache::new(3);
+use chrono::Utc;
+use libc::clone;
 
-    let path = "./Cargo.toml".to_string();
+fn main() -> io::Result<()> {
 
-    let file = File::open(Path::new(&path)).unwrap();
+    let mut manager = TempFileManager::new(&Path::new("/tmp").join(TempFileManager::unique_name()));
 
-    let mmap = unsafe{Mmap::map(&file).unwrap()};
+    let key1 = "/index.html".to_string();
 
-    cache.insert(path.clone(),mmap);
-    cache.insert("./web_files/ceva.html".to_string(),
-                 unsafe{Mmap::map(&File::open(Path::new(&"./web_files/ceva.html".to_string())).unwrap()).unwrap()}
-    );
-    cache.insert("./web_files/hello.html".to_string(),
-                 unsafe{Mmap::map(&File::open(Path::new(&"./web_files/hello.html".to_string())).unwrap()).unwrap()}
-    );
+    manager.add(key1.clone())?;
 
-    cache.insert("./nigga".to_string(),unsafe{Mmap::map(&File::open(Path::new(&"./web_files/hello.html".to_string())).unwrap()).unwrap()});
+    let key2 = "/index2.html".to_string();
 
-    let a = cache.get(&"./web_files/ceva.html".to_string());
-    println!("{:?}",cache);
+    manager.add(key2.clone())?;
+
+    let file = manager.open("/cevarandom.html".to_string())?;
+
+    println!("{file:?}");
 
 
+
+    sleep(Duration::from_secs(20));
+
+    Ok(())
 }
-
 
 

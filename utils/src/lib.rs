@@ -6,3 +6,4 @@ pub mod sctp_proxy;
 pub mod http_parsers;
 pub mod thread_pool;
 pub mod lru_cache;
+pub mod temp_file_manager;
