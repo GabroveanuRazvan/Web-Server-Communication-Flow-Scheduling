@@ -10,7 +10,7 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use utils::thread_pool;
 use utils::thread_pool::ThreadPool;
-use utils::lru_cache::{FileCache, MappedFile};
+use utils::lru_cache::{TempFileCache, MappedFile};
 
 use http::request::Request;
 use http::Uri;
@@ -24,23 +24,25 @@ use utils::temp_file_manager::TempFileManager;
 
 fn main() -> io::Result<()> {
 
-    // let mut manager = TempFileManager::new(Path::new("/tmp/cache"));
-    //
-    // let file = manager.open("/ceva".to_string()).unwrap();
-    // file.set_len(1024).unwrap();
-    // let mut mmap = MappedFile::new(file).unwrap();
-    //
-    // mmap.write(b"ana are mrere");
+    let mut cache = TempFileCache::new(3);
 
-    let file = OpenOptions::new().write(true).read(true).create(true).open("./test.txt").unwrap();
+    cache.insert("/ana are mere".to_string());
+    cache.insert("/ana are mere".to_string());
+    cache.insert("/ana be here2".to_string());
+    cache.insert("/ana be here3".to_string());
 
-    let mut mmap = MappedFile::new(file).unwrap();
+    cache.insert("/1".to_string());
+    cache.insert("/2".to_string());
+    cache.insert("/3".to_string());
 
-    mmap.append(b"ceva")?;
-    mmap.append(b"\nana are mere")?;
+    let map = cache.get(&"/1".to_string()).unwrap();
 
-    mmap.flush()?;
-    // sleep(Duration::from_secs(20));
+    let mut map = map.borrow_mut();
+    map.write_append(b"mereajhishuiadsijowefjioewfjioewfjiooewjiojiwe");
+
+    println!("{:#?}", map);
+    sleep(Duration::from_secs(20));
+
     Ok(())
 }
 

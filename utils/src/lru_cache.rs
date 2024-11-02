@@ -1,9 +1,8 @@
+use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::Arc;
 use indexmap::IndexMap;
-use memmap2::{Mmap, MmapMut};
-use crate::temp_file_manager;
+use memmap2::MmapMut;
 use crate::temp_file_manager::TempFileManager;
 use std::fs::File;
 use std::io;
@@ -11,14 +10,14 @@ static MANAGER_PATH: &str = "/tmp/cache";
 
 /// File cache that maps the path of the file to a rc<mmap> smart pointer
 #[derive(Debug)]
-pub struct FileCache{
+pub struct TempFileCache {
     capacity: usize,
-    map: IndexMap<String, Rc<Mmap>>,
+    ordered_map: IndexMap<String, Rc<RefCell<MappedFile>>>,
     file_manager: TempFileManager,
 }
 
 
-impl FileCache{
+impl TempFileCache {
 
     /// Creates an empty cache with a non-negative capacity
     pub fn new(capacity: usize) -> Self{
@@ -26,39 +25,59 @@ impl FileCache{
 
         Self{
             capacity,
-            map: IndexMap::new(),
+            ordered_map: IndexMap::new(),
             file_manager: TempFileManager::new(Path::new(MANAGER_PATH)),
         }
     }
 
-    /// Inserts a new file into the cache
-    pub fn insert(&mut self,key: String , value: Mmap){
+    /// Creates a new temporary file that is mapped on the given string
+    /// Evicts the least used file from the cache if at full capacity
+    pub fn insert(&mut self,key: String){
 
-        let map_size = self.map.len();
+        let map_size = self.ordered_map.len();
 
-        if(map_size == self.capacity){
+        if map_size == self.capacity{
+
+            // obtain the first key
+            let (key,_) = self.ordered_map.first().unwrap();
+            // evict the temporary file
+            self.file_manager.evict(key);
+
             // remove oldest entry
-            self.map.shift_remove_index(0);
+            self.ordered_map.shift_remove_index(0);
 
         }
 
-        self.map.insert(key,Rc::new(value));
+        // open and create a new temporary file
+        let file = match self.file_manager.open(key.clone()){
+            Ok(file) => file,
+            Err(error) => panic!("Error while inserting a new file into the cache: {}",error)
+        };
+
+        // using the created and opened file create a memory map to it
+        let mut mapped_file = match MappedFile::new(file){
+            Ok(mapped_file) => mapped_file,
+            Err(error) => panic!("Error while creating a mapped file: {}",error)
+        };
+
+        // finally insert the key and the mapped file
+        self.ordered_map.insert(key, Rc::new(RefCell::new(mapped_file)));
 
     }
 
-    /// Obtains the file from the cache if the cache is hit
-    pub fn get(&mut self,key: &str)-> Option<Rc<Mmap>>{
+    /// Obtains the wrapped MappedFile from the cache if the cache is hit
+    pub fn get(&mut self,key: &str)-> Option<Rc<RefCell<MappedFile>>>{
 
-        if let Some(value) = self.map.get(key){
+        if let Some(value) = self.ordered_map.get(key){
 
             // get a copy of the value
             let value_copy = Rc::clone(value);
             // remove the old entry; value goes out of scope
-            self.map.shift_remove(key);
+            self.ordered_map.shift_remove(key);
             // insert the got value
-            self.map.insert(key.to_string(),value_copy);
+            self.ordered_map.insert(key.to_string(), value_copy);
 
-            return Some(Rc::clone(self.map.get(key).unwrap()));
+            return Some(Rc::clone(self.ordered_map.get(key).unwrap()));
 
         }
 
@@ -67,14 +86,17 @@ impl FileCache{
 
 }
 
+/// Data structure used to store a file and its mapped content
+#[derive(Debug)]
 pub struct MappedFile{
 
-    pub file: File,
-    pub mmap: MmapMut,
+    file: File,
+    mmap: MmapMut,
 
 }
 
 impl MappedFile{
+    /// Create a new map from a given file
     pub fn new(file: File) -> io::Result<Self>{
 
         let mmap = unsafe{MmapMut::map_mut(&file)?};
@@ -86,15 +108,13 @@ impl MappedFile{
 
     }
 
-    pub fn write(&mut self, data: &[u8]){
-        self.mmap[..data.len()].copy_from_slice(data)
-    }
-
+    /// Used to flush the written data on the disk
     pub fn flush(&mut self) -> io::Result<()>{
         self.mmap.flush()
     }
 
-    pub fn append(&mut self,data: &[u8]) -> io::Result<()>{
+    /// Writes the new data at the end of the file
+    pub fn write_append(&mut self,data: &[u8]) -> io::Result<()>{
 
         let current_file_size = self.file.metadata().unwrap().len() as usize;
         let new_size = current_file_size + data.len();
@@ -107,4 +127,10 @@ impl MappedFile{
 
         Ok(())
     }
+
+    /// Getter for the raw slice of bytes of the file
+    pub fn mmap_as_slice(&self) -> &[u8]{
+        &self.mmap
+    }
+
 }

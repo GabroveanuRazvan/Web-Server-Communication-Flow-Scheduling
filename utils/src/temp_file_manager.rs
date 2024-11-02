@@ -42,16 +42,16 @@ impl TempFileManager {
     }
 
     /// Evicts a chosen file based on its id if the file exists
-    pub fn evict(&mut self,key: String) -> io::Result<()>{
+    pub fn evict(&mut self,key: &String) -> io::Result<()>{
 
-        let file_name = match self.mapped_files.get(&key){
+        let file_name = match self.mapped_files.get(key){
             Some(value) => Ok(value),
             None => Err(io::Error::new(io::ErrorKind::NotFound,"Key not found"))
         }?;
 
         let file_path = self.dir_path.join(file_name);
 
-        self.mapped_files.remove(&key);
+        self.mapped_files.remove(key);
 
         remove_file(file_path)
     }
