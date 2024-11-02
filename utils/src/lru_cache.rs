@@ -1,14 +1,20 @@
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 use indexmap::IndexMap;
-use memmap2::Mmap;
-
+use memmap2::{Mmap, MmapMut};
+use crate::temp_file_manager;
+use crate::temp_file_manager::TempFileManager;
+use std::fs::File;
+use std::io;
+static MANAGER_PATH: &str = "/tmp/cache";
 
 /// File cache that maps the path of the file to a rc<mmap> smart pointer
 #[derive(Debug)]
 pub struct FileCache{
     capacity: usize,
     map: IndexMap<String, Rc<Mmap>>,
+    file_manager: TempFileManager,
 }
 
 
@@ -21,6 +27,7 @@ impl FileCache{
         Self{
             capacity,
             map: IndexMap::new(),
+            file_manager: TempFileManager::new(Path::new(MANAGER_PATH)),
         }
     }
 
@@ -60,3 +67,44 @@ impl FileCache{
 
 }
 
+pub struct MappedFile{
+
+    pub file: File,
+    pub mmap: MmapMut,
+
+}
+
+impl MappedFile{
+    pub fn new(file: File) -> io::Result<Self>{
+
+        let mmap = unsafe{MmapMut::map_mut(&file)?};
+
+        Ok(Self{
+            file,
+            mmap,
+        })
+
+    }
+
+    pub fn write(&mut self, data: &[u8]){
+        self.mmap[..data.len()].copy_from_slice(data)
+    }
+
+    pub fn flush(&mut self) -> io::Result<()>{
+        self.mmap.flush()
+    }
+
+    pub fn append(&mut self,data: &[u8]) -> io::Result<()>{
+
+        let current_file_size = self.file.metadata().unwrap().len() as usize;
+        let new_size = current_file_size + data.len();
+
+        self.file.set_len(new_size as u64).unwrap();
+
+        self.mmap = unsafe{MmapMut::map_mut(&self.file)?};
+
+        self.mmap[current_file_size..new_size].copy_from_slice(data);
+
+        Ok(())
+    }
+}

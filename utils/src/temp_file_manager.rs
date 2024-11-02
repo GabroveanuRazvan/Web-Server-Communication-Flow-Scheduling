@@ -6,7 +6,7 @@ use chrono::Utc;
 
 /// Manager for creating, evicting, opening temporary files
 #[derive(Debug)]
-struct TempFileManager{
+pub struct TempFileManager{
 
     dir_path: PathBuf,
     mapped_files: HashMap<String,String>,

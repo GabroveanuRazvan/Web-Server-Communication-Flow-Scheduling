@@ -10,37 +10,37 @@ use std::time::Duration;
 use indexmap::IndexMap;
 use utils::thread_pool;
 use utils::thread_pool::ThreadPool;
-use utils::lru_cache::FileCache;
+use utils::lru_cache::{FileCache, MappedFile};
 
 use http::request::Request;
 use http::Uri;
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapMut};
 
 use std::fs::{create_dir,remove_dir,OpenOptions,remove_file};
 
 use chrono::Utc;
 use libc::clone;
+use utils::temp_file_manager::TempFileManager;
 
 fn main() -> io::Result<()> {
 
-    let mut manager = TempFileManager::new(&Path::new("/tmp").join(TempFileManager::unique_name()));
+    // let mut manager = TempFileManager::new(Path::new("/tmp/cache"));
+    //
+    // let file = manager.open("/ceva".to_string()).unwrap();
+    // file.set_len(1024).unwrap();
+    // let mut mmap = MappedFile::new(file).unwrap();
+    //
+    // mmap.write(b"ana are mrere");
 
-    let key1 = "/index.html".to_string();
+    let file = OpenOptions::new().write(true).read(true).create(true).open("./test.txt").unwrap();
 
-    manager.add(key1.clone())?;
+    let mut mmap = MappedFile::new(file).unwrap();
 
-    let key2 = "/index2.html".to_string();
+    mmap.append(b"ceva")?;
+    mmap.append(b"\nana are mere")?;
 
-    manager.add(key2.clone())?;
-
-    let file = manager.open("/cevarandom.html".to_string())?;
-
-    println!("{file:?}");
-
-
-
-    sleep(Duration::from_secs(20));
-
+    mmap.flush()?;
+    // sleep(Duration::from_secs(20));
     Ok(())
 }
 
