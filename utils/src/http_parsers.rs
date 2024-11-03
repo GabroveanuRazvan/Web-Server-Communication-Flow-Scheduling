@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use http::{Method, Request, Response, StatusCode, Uri};
+use scraper::{Html, Selector};
 
 pub fn parse_http_request(request_str: &str) -> Request<()> {
     let mut lines = request_str.lines();
@@ -77,4 +78,28 @@ pub fn basic_http_response(content_length: usize) -> Response<()>{
         .header("Content-Length", content_length.to_string())
         .body(())
         .unwrap()
+}
+
+pub fn extracts_http_paths(html_content: String) -> Vec<String> {
+
+    let document = Html::parse_document(&html_content);
+
+    let href_selector = Selector::parse("[href]").unwrap();
+    let src_selector = Selector::parse("[src]").unwrap();
+
+    let mut paths =  Vec::new();
+
+    for element in document.select(&href_selector) {
+        if let Some(href) = element.value().attr("href") {
+            paths.push(href.to_string());
+        }
+    }
+
+    for element in document.select(&src_selector) {
+        if let Some(src) = element.value().attr("src") {
+            paths.push(src.to_string());
+        }
+    }
+
+    paths
 }
