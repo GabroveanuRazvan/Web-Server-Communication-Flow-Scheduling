@@ -4,6 +4,8 @@ use libc::{close, recvmsg, IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
 use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
+use http::Request;
+use crate::http_parsers::parse_http_request;
 
 #[derive(Debug)]
 pub struct SctpStream{
@@ -101,6 +103,17 @@ impl SctpStream{
 
     }
 
+    pub fn read_request(&mut self,buffer_size: usize) -> Result<Request<()>>{
+
+        let mut buffer = vec![0u8;buffer_size];
+
+        let num_bytes = self.read(&mut buffer,None,None)?;
+
+        let str_request = String::from_utf8_lossy(&buffer[..num_bytes]);
+
+        Ok(parse_http_request(str_request.as_ref()))
+    }
+
     /// Method used to write data to a peer using a designated stream
     pub fn write(&mut self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32) -> Result<usize>{
 
@@ -149,6 +162,12 @@ impl SctpStream{
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
+
+    }
+
+    pub fn write_request(&mut self,request: Request<()>,stream_number: u16,ppid: u32) -> Result<usize>{
+
+        
 
     }
 

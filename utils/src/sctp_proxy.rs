@@ -51,7 +51,7 @@ impl SctpProxy{
 
             //TODO thread pool
 
-                Self::handle_client(stream,sctp_client)
+            Self::handle_client(stream,sctp_client)
 
 
         }
@@ -117,7 +117,6 @@ impl SctpProxy{
                             // response received
                             Ok(n) =>{
 
-                                debug_sctp_sndrcvinfo(&sender_info);
                                 // write into tcp stream
                                 tcp_stream.write(&buffer[..n]);
                                 println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
