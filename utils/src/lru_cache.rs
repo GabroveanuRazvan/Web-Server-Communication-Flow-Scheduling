@@ -23,14 +23,17 @@ impl TempFileCache {
     pub fn new(capacity: usize) -> Self{
         assert!(capacity > 0);
 
+        // get a unique name for every cache
+        let path = String::from(MANAGER_PATH) + TempFileManager::unique_name().as_str();
+
         Self{
             capacity,
             ordered_map: IndexMap::new(),
-            file_manager: TempFileManager::new(Path::new(MANAGER_PATH)),
+            file_manager: TempFileManager::new(Path::new(&path)),
         }
     }
 
-    /// Creates a new temporary file that is mapped on the given string
+    /// Creates a new temporary file that is mapped on the given string.
     /// Evicts the least used file from the cache if at full capacity
     pub fn insert(&mut self,key: String){
 

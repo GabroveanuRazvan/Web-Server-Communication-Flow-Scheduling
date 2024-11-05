@@ -4,10 +4,14 @@ use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUM
 use crate::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
-use crate::http_parsers::{http_response_to_string, string_to_http_request, string_to_http_response};
+use libc::mmap;
+use crate::http_parsers::{http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
+use crate::lru_cache::TempFileCache;
 
 const BUFFER_SIZE: usize = 4096;
+const CACHE_CAPACITY: usize = 20;
+const CHUNK_SIZE: usize = 2048;
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
@@ -30,6 +34,9 @@ impl SctpProxy{
         println!("Messages redirected to: {:?}:{}",self.sctp_address,self.port);
         println!("Connect by: http://127.0.0.1:{}",self.port);
 
+        // cache setup
+        let mut cache = TempFileCache::new(CACHE_CAPACITY);
+
         for stream in tcp_server.incoming(){
 
             let stream = stream?;
@@ -50,9 +57,11 @@ impl SctpProxy{
             sctp_client.connect();
             sctp_client.options();
 
+
+
             //TODO thread pool
 
-            Self::handle_client(stream,sctp_client)
+            Self::handle_client(stream,sctp_client,&mut cache)
 
 
         }
@@ -61,7 +70,7 @@ impl SctpProxy{
     }
 
     /// Client handler method
-    fn handle_client(mut tcp_stream: TcpStream, mut sctp_client: SctpStream) {
+    fn handle_client(mut tcp_stream: TcpStream, mut sctp_client: SctpStream,cache: &mut TempFileCache){
 
         // used to RR over the streams
         let mut stream_number = 0u16;
@@ -73,6 +82,7 @@ impl SctpProxy{
         loop{
 
             println!("Tcp listener waiting for messages...");
+
             // the tcp stream waits for a request
             match tcp_stream.read(&mut buffer){
 
@@ -90,17 +100,74 @@ impl SctpProxy{
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
 
                     println!("Got Bytes: {n}");
-                    println!("Tcp Client received request:\n{}", received_message);
+                    // println!("Tcp Client received request:\n{}", received_message);
 
-                    if let Err(error) = sctp_client.write(&mut buffer[..],n,stream_number,0){
-                        panic!("Sctp Client write error: {}", error);
+                    // get the uri
+                    let mut uri = string_to_http_request(received_message.as_ref())
+                        .uri()
+                        .to_string()
+                        .trim_matches('?')
+                        .to_string();
+
+                    if uri == "/"{
+                        uri = "/index.html".to_string()
                     }
+
+                    // cache hit case
+                    if let Some(file) = cache.get(&uri){
+                        println!("Cache hit {uri}!");
+
+                        let mapped_file = file.borrow();
+                        let mmap_ptr = mapped_file.mmap_as_slice();
+
+                        // send the file in chunks
+                        for chunk in mmap_ptr.chunks(CHUNK_SIZE){
+                            tcp_stream.write(chunk).expect("Tcp stream write error cache");
+                        }
+
+                        continue;
+                    }
+
+                    // cache miss case
+                    println!("Cache miss {uri}!");
+                    // create a cache entry
+                    cache.insert(uri.clone());
+
+                    // send the request
+                    sctp_client.write(&mut buffer[..],n,stream_number,0).expect("Sctp Client write error");
 
                     // simple RR over the streams
                     stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
 
                     let mut sender_info = new_sctp_sndrinfo();
 
+                    let mapped_file = cache.get(&uri).unwrap();
+                    let mut mmap = mapped_file.borrow_mut();
+
+                    //read the response
+                    match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+
+                        Err(error)=>{
+                            panic!("Sctp read error: {}", error);
+                        }
+
+                        // response received
+                        Ok(n) =>{
+
+                            // write to temporary file
+                            mmap.write_append(&buffer[..n]).expect("Temporary file write error");
+
+                            // write into tcp stream
+                            if let Err(error) = tcp_stream.write(&buffer[..n]){
+                                panic!("Tcp write error: {}", error);
+                            }
+
+                            // println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
+                        }
+                    }
+
+
+                    // now loop to receive the chunked response body
                     loop{
                         // the sctp-stream waits to get a response
                         match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
@@ -108,23 +175,30 @@ impl SctpProxy{
                             Ok(1) => {
                                 println!("Sctp client ended processing");
                                 break;
+
                             }
 
                             Err(error)=>{
                                 panic!("Sctp read error: {}", error);
                             }
 
-                            // response received
+                            // response chunk received
                             Ok(n) =>{
 
-                                // write into tcp stream
-                                tcp_stream.write(&buffer[..n]);
-                                println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
+                                // write to temporary file
+                                mmap.write_append(&buffer[..n]).expect("Temporary file write error");
+
+                                // write to tcp stream
+                               tcp_stream.write(&buffer[..n]).expect("Tcp stream write error");
+
+                                // println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
                             }
                         }
                     }
 
+                    // after caching the file it's time to do some prefetching
 
+                    // !TODO!
 
                 }
 
