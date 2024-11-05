@@ -110,6 +110,7 @@ impl SctpServer{
         let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
 
         loop{
+
             let bytes_read = stream.read(&mut buffer,Some(&mut sender_info),None)?;
 
             if bytes_read == 0{
@@ -147,7 +148,8 @@ impl SctpServer{
 
             let response_body_size = file_buffer.len();
 
-            let mut response_bytes = http_response_to_string(&basic_http_response(response_body_size)).into_bytes();
+
+            let mut response_bytes = http_response_to_string(basic_http_response(response_body_size)).into_bytes();
             let response_size = response_bytes.len();
 
             // send the header of the html response

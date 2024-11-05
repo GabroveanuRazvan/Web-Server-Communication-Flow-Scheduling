@@ -44,7 +44,7 @@ pub fn string_to_http_request(request_str: &str) -> Request<()> {
     request_builder.body(()).unwrap()
 }
 
-pub fn http_request_to_string(request: &Request<()>) -> String {
+pub fn http_request_to_string(request: Request<()>) -> String {
 
     // build the status line: METHOD URI VERSION\r\n
     let status_line = format!(
@@ -70,7 +70,7 @@ pub fn http_request_to_string(request: &Request<()>) -> String {
     status_line + &headers
 }
 
-pub fn http_response_to_string(response: &Response<()>) -> String {
+pub fn http_response_to_string(response: Response<()>) -> String {
 
     // construct the status line and the reason if known
     let status_line = format!(
@@ -97,6 +97,7 @@ pub fn http_response_to_string(response: &Response<()>) -> String {
 }
 
 pub fn string_to_http_response(response_str: &str) -> Response<()> {
+
     let mut lines = response_str.lines();
 
     // get the status line
@@ -148,8 +149,10 @@ pub fn basic_http_response(content_length: usize) -> Response<()>{
 
 pub fn extracts_http_paths(html_content: String) -> Vec<String> {
 
+    // parse the html document
     let document = Html::parse_document(&html_content);
 
+    // prepare selectors for href and src
     let href_selector = Selector::parse("[href]").unwrap();
     let src_selector = Selector::parse("[src]").unwrap();
 

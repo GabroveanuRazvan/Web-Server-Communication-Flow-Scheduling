@@ -4,6 +4,7 @@ use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUM
 use crate::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
+use crate::http_parsers::{http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 
 const BUFFER_SIZE: usize = 4096;
@@ -89,9 +90,8 @@ impl SctpProxy{
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
 
                     println!("Got Bytes: {n}");
-                    println!("Tcp Client received message:\n{}", received_message);
+                    println!("Tcp Client received request:\n{}", received_message);
 
-                    // send the request to server via sctp-stream
                     if let Err(error) = sctp_client.write(&mut buffer[..],n,stream_number,0){
                         panic!("Sctp Client write error: {}", error);
                     }

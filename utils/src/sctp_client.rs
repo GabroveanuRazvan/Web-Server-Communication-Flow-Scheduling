@@ -4,8 +4,8 @@ use libc::{close, recvmsg, IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
 use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
-use http::Request;
-use crate::http_parsers::string_to_http_request;
+use http::{Request, Response};
+use crate::http_parsers::{http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 
 #[derive(Debug)]
 pub struct SctpStream{
@@ -100,18 +100,35 @@ impl SctpStream{
             Err(error) => Err(error),
         }
 
-
     }
 
-    pub fn read_request(&mut self,buffer_size: usize) -> Result<Request<()>>{
+    pub fn read_request(&mut self,buffer_size: usize) -> Result<(Request<()>,usize)>{
 
+        // read the request into the buffer
         let mut buffer = vec![0u8;buffer_size];
 
         let num_bytes = self.read(&mut buffer,None,None)?;
 
+        // get a string from the buffer and parse it
         let str_request = String::from_utf8_lossy(&buffer[..num_bytes]);
 
-        Ok(string_to_http_request(str_request.as_ref()))
+        let request = string_to_http_request(str_request.as_ref());
+
+        Ok((request,num_bytes))
+    }
+
+    pub fn read_response(&mut self,buffer_size: usize) -> Result<(Response<()>,usize)>{
+        // read the response into the buffer
+        let mut buffer = vec![0u8;buffer_size];
+
+        let num_bytes = self.read(&mut buffer,None,None)?;
+
+        // get a string from the buffer and parse it
+        let str_response = String::from_utf8_lossy(&buffer[..num_bytes]);
+
+        let response = string_to_http_response(str_response.as_ref());
+
+        Ok((response,num_bytes))
     }
 
     /// Method used to write data to a peer using a designated stream
@@ -167,7 +184,21 @@ impl SctpStream{
 
     pub fn write_request(&mut self,request: Request<()>,stream_number: u16,ppid: u32) -> Result<usize>{
 
-        Ok(1)
+        // get the string from a request
+        let request_str = http_request_to_string(request);
+
+        // send the string as bytes and return the result
+        self.write_all(&request_str.into_bytes(),stream_number,ppid)
+
+    }
+
+    pub fn write_response(&mut self,response: Response<()>,stream_number: u16,ppid: u32) -> Result<usize>{
+
+        // get the string from the response
+        let response_str = http_response_to_string(response);
+
+        // send the string as bytes and return the result
+        self.write_all(&response_str.into_bytes(),stream_number,ppid)
 
     }
 
