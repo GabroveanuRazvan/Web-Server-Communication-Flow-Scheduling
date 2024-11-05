@@ -11,7 +11,7 @@ use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderI
 use crate::lru_cache::TempFileCache;
 
 const BUFFER_SIZE: usize = 4096;
-const CACHE_CAPACITY: usize = 20;
+const CACHE_CAPACITY: usize = 5;
 const CHUNK_SIZE: usize = 2048;
 
 /// Abstraction for a tcp to sctp proxy
@@ -176,7 +176,6 @@ impl SctpProxy{
                             Ok(1) => {
                                 println!("Sctp client ended processing");
                                 break;
-
                             }
 
                             Err(error)=>{
@@ -247,7 +246,6 @@ impl SctpProxy{
                                     Ok(1) => {
                                         println!("Sctp client ended processing prefetch");
                                         break;
-
                                     }
 
                                     Err(error)=>{
@@ -264,13 +262,9 @@ impl SctpProxy{
                                 }
                             }
 
-
                         }
 
-
                     }
-
-
 
                 }
 

@@ -169,13 +169,27 @@ pub fn extracts_http_paths(html_content: &str) -> Vec<String> {
 
     for element in document.select(&href_selector) {
         if let Some(href) = element.value().attr("href") {
-            paths.push(href.to_string());
+
+            let path = href.to_string();
+
+            if path.starts_with("https"){
+               continue;
+            }
+
+            paths.push(path);
         }
     }
 
     for element in document.select(&src_selector) {
         if let Some(src) = element.value().attr("src") {
-            paths.push(src.to_string());
+
+            let path = src.to_string();
+
+            if path.starts_with("https"){
+                continue;
+            }
+
+            paths.push(path);
         }
     }
 
