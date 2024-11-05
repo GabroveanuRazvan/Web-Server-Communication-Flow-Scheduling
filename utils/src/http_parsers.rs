@@ -147,7 +147,16 @@ pub fn basic_http_response(content_length: usize) -> Response<()>{
         .unwrap()
 }
 
-pub fn extracts_http_paths(html_content: String) -> Vec<String> {
+pub fn basic_http_get_request(uri: &str) -> Request<()> {
+
+    Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .body(()).unwrap()
+
+}
+
+pub fn extracts_http_paths(html_content: &str) -> Vec<String> {
 
     // parse the html document
     let document = Html::parse_document(&html_content);

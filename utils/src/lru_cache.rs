@@ -34,8 +34,13 @@ impl TempFileCache {
     }
 
     /// Creates a new temporary file that is mapped on the given string.
-    /// Evicts the least used file from the cache if at full capacity
+    /// Evicts the least used file from the cache if at full capacity.
+    /// If the key already exists nothing changes
     pub fn insert(&mut self,key: String){
+
+        if let Some(_) = self.peek(&key){
+            return;
+        }
 
         let map_size = self.ordered_map.len();
 
@@ -82,6 +87,16 @@ impl TempFileCache {
 
             return Some(Rc::clone(self.ordered_map.get(key).unwrap()));
 
+        }
+
+        None
+    }
+
+    /// Obtains the wrapped MappedFile from the cache without changing cache state
+    pub fn peek(&mut self,key: &str) -> Option<Rc<RefCell<MappedFile>>>{
+
+        if let Some(value) = self.ordered_map.get(key){
+            return Some(Rc::clone(self.ordered_map.get(key).unwrap()));
         }
 
         None

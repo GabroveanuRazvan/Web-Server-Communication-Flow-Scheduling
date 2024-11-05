@@ -4,8 +4,9 @@ use crate::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUM
 use crate::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
+use http::{Method, Request};
 use libc::mmap;
-use crate::http_parsers::{http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
+use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::lru_cache::TempFileCache;
 
@@ -142,7 +143,7 @@ impl SctpProxy{
                     let mut sender_info = new_sctp_sndrinfo();
 
                     let mapped_file = cache.get(&uri).unwrap();
-                    let mut mmap = mapped_file.borrow_mut();
+                    let mut mmap_ptr = mapped_file.borrow_mut();
 
                     //read the response
                     match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
@@ -155,7 +156,7 @@ impl SctpProxy{
                         Ok(n) =>{
 
                             // write to temporary file
-                            mmap.write_append(&buffer[..n]).expect("Temporary file write error");
+                            mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
 
                             // write into tcp stream
                             if let Err(error) = tcp_stream.write(&buffer[..n]){
@@ -186,7 +187,7 @@ impl SctpProxy{
                             Ok(n) =>{
 
                                 // write to temporary file
-                                mmap.write_append(&buffer[..n]).expect("Temporary file write error");
+                                mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
 
                                 // write to tcp stream
                                tcp_stream.write(&buffer[..n]).expect("Tcp stream write error");
@@ -198,7 +199,78 @@ impl SctpProxy{
 
                     // after caching the file it's time to do some prefetching
 
-                    // !TODO!
+                    if uri.ends_with(".html"){
+
+                        let future_uri = extracts_http_paths(String::from_utf8_lossy(mmap_ptr.mmap_as_slice()).as_ref());
+
+                        for uri in future_uri {
+
+                            let uri = uri.trim_matches('/');
+                            let uri = "/".to_string() + uri;
+
+                            // if the file is already cached just continue
+                            if let Some(_) = cache.peek(&uri){
+                                continue;
+                            }
+
+                            // insert the new value into the cache
+                            cache.insert(uri.clone());
+
+                            let mut mapped_file = cache.get(&uri).unwrap();
+                            let mut mmap_ptr = mapped_file.borrow_mut();
+
+                            // get a string request and send it to the server
+                            let request = http_request_to_string(basic_http_get_request(&uri));
+
+                            sctp_client.write_all(request.as_bytes(),stream_number,0).expect("Sctp Client prefetch write error");
+
+                            //read the response body
+                            match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+
+                                Err(error)=>{
+                                    panic!("Sctp read error: {}", error);
+                                }
+
+                                // response received
+                                Ok(n) =>{
+                                    // write to temporary file
+                                    mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+
+                                }
+                            }
+
+                            // now loop to receive the chunked response body
+                            loop{
+                                // the sctp-stream waits to get a response
+                                match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                                    // end message received
+                                    Ok(1) => {
+                                        println!("Sctp client ended processing prefetch");
+                                        break;
+
+                                    }
+
+                                    Err(error)=>{
+                                        panic!("Sctp read error: {}", error);
+                                    }
+
+                                    // response chunk received
+                                    Ok(n) =>{
+
+                                        // write to temporary file
+                                        mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+
+                                    }
+                                }
+                            }
+
+
+                        }
+
+
+                    }
+
+
 
                 }
 

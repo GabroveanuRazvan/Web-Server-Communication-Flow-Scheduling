@@ -158,12 +158,6 @@ impl SctpServer{
                 Err(e) => println!("Write Error: {:?}",e)
             }
 
-            // // mark the end of the header by sending just one character different from \0
-            // match stream.write(b"1",1,0,2){
-            //     Ok(bytes) => println!("Wrote {bytes}"),
-            //     Err(e) => println!("Write Error: {:?}",e)
-            // }
-
             // send the body of the response
             match stream.write_chunked(&file_buffer,CHUNK_SIZE,0,2){
                 Ok(bytes) => println!("Wrote {bytes}"),
