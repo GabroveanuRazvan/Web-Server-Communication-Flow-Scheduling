@@ -9,7 +9,7 @@ use memmap2::Mmap;
 use crate::sctp_client::SctpStream;
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
 use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo, safe_close};
-use super::http_parsers::{basic_http_response, parse_http_request, response_to_string};
+use super::http_parsers::{basic_http_response, string_to_http_request, http_response_to_string};
 
 const BUFFER_SIZE: usize = 4096;
 const CHUNK_SIZE: usize = 2048;
@@ -120,7 +120,7 @@ impl SctpServer{
 
             debug_sctp_sndrcvinfo(&sender_info);
 
-            let request = parse_http_request(&String::from_utf8(buffer.clone()).unwrap());
+            let request = string_to_http_request(&String::from_utf8(buffer.clone()).unwrap());
 
             println!("{} {}",request.method().to_string(),request.uri().to_string());
 
@@ -147,7 +147,7 @@ impl SctpServer{
 
             let response_body_size = file_buffer.len();
 
-            let mut response_bytes = response_to_string(&basic_http_response(response_body_size)).into_bytes();
+            let mut response_bytes = http_response_to_string(&basic_http_response(response_body_size)).into_bytes();
             let response_size = response_bytes.len();
 
             // send the header of the html response

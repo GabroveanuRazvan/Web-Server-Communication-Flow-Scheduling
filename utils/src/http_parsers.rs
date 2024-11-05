@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 use http::{Method, Request, Response, StatusCode, Uri};
 use scraper::{Html, Selector};
 
-pub fn parse_http_request(request_str: &str) -> Request<()> {
+pub fn string_to_http_request(request_str: &str) -> Request<()> {
     let mut lines = request_str.lines();
 
     // First line contains the method, URI, and version
@@ -43,7 +44,33 @@ pub fn parse_http_request(request_str: &str) -> Request<()> {
     request_builder.body(()).unwrap()
 }
 
-pub fn response_to_string(response: &Response<()>) -> String {
+pub fn http_request_to_string(request: &Request<()>) -> String {
+
+    // build the status line: METHOD URI VERSION\r\n
+    let status_line = format!(
+        "{} {} HTTP/1.1\r\n",
+        request.method(),
+        request.uri()
+    );
+
+    // build the headers: header_name: header_value\r\n
+    let mut headers = String::new();
+    for (key, value) in request.headers() {
+        headers.push_str(&format!(
+            "{}: {}\r\n",
+            key.as_str(),
+            value.to_str().unwrap_or("")
+        ));
+    }
+
+    // the headers end with \r\n
+    headers.push_str("\r\n");
+
+    // add the carriages to mark the end of the headers
+    status_line + &headers
+}
+
+pub fn http_response_to_string(response: &Response<()>) -> String {
 
     // construct the status line and the reason if known
     let status_line = format!(
@@ -67,6 +94,45 @@ pub fn response_to_string(response: &Response<()>) -> String {
 
     // concatenate the status line and headers
     status_line + &headers
+}
+
+pub fn string_to_http_response(response_str: &str) -> Response<()> {
+    let mut lines = response_str.lines();
+
+    // get the status line
+    let status_line = lines.next().unwrap();
+    // split the status line
+    let mut status_parts = status_line.split_whitespace();
+
+    // the status line consists of VERSION STATUS_CODE STATUS, we just need the status code
+    let _version = status_parts.next();
+    let status_code_str = status_parts.next().unwrap();
+
+    // Parse the code into an integer
+    let status_code = status_code_str.parse::<u16>().unwrap();
+    let status = StatusCode::from_u16(status_code).unwrap();
+
+    // build the headers: header_name: header_value\r\n
+    let mut headers = HashMap::new();
+    for line in lines {
+        if line.is_empty() {
+            // reached the end of headers
+            break;
+        }
+        let parts: Vec<&str> = line.splitn(2, ": ").collect();
+        if parts.len() == 2 {
+            headers.insert(parts[0].to_string(), parts[1].to_string());
+        }
+    }
+
+    // Build the response
+    let mut response_builder = Response::builder().status(status);
+
+    for (key, value) in headers {
+        response_builder = response_builder.header(&key, value);
+    }
+
+    response_builder.body(()).unwrap()
 }
 
 pub fn basic_http_response(content_length: usize) -> Response<()>{

@@ -5,7 +5,7 @@ use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_ge
 use crate::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
 use http::Request;
-use crate::http_parsers::parse_http_request;
+use crate::http_parsers::string_to_http_request;
 
 #[derive(Debug)]
 pub struct SctpStream{
@@ -111,7 +111,7 @@ impl SctpStream{
 
         let str_request = String::from_utf8_lossy(&buffer[..num_bytes]);
 
-        Ok(parse_http_request(str_request.as_ref()))
+        Ok(string_to_http_request(str_request.as_ref()))
     }
 
     /// Method used to write data to a peer using a designated stream
@@ -167,7 +167,7 @@ impl SctpStream{
 
     pub fn write_request(&mut self,request: Request<()>,stream_number: u16,ppid: u32) -> Result<usize>{
 
-        
+        Ok(1)
 
     }
 
