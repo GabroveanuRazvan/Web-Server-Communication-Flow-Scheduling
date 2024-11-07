@@ -11,7 +11,7 @@ use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderI
 use crate::lru_cache::TempFileCache;
 
 const BUFFER_SIZE: usize = 4096;
-const CACHE_CAPACITY: usize = 5;
+const CACHE_CAPACITY: usize = 20;
 const CHUNK_SIZE: usize = 2048;
 
 /// Abstraction for a tcp to sctp proxy
@@ -196,6 +196,8 @@ impl SctpProxy{
                         }
                     }
 
+                    // TODO se trimite request la browser abia dupa ce am facut prefetching nu inainte
+
                     // after caching the file it's time to do some prefetching
 
                     if uri.ends_with(".html"){
@@ -223,6 +225,8 @@ impl SctpProxy{
 
                             sctp_client.write_all(request.as_bytes(),stream_number,0).expect("Sctp Client prefetch write error");
 
+                            // RR over the streams
+                            stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
                             //read the response body
                             match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 

@@ -148,7 +148,6 @@ impl SctpServer{
 
             let response_body_size = file_buffer.len();
 
-
             let mut response_bytes = http_response_to_string(basic_http_response(response_body_size)).into_bytes();
             let response_size = response_bytes.len();
 
