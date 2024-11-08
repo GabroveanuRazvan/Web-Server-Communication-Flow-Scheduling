@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::ops::DerefMut;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
@@ -19,8 +20,8 @@ pub struct SjfPool<J>
 where
     J: Job + Ord + Send + 'static,
 {
-    heap: Arc<(Mutex<BinaryHeap<Reverse<J>>>, Condvar)>,
-    workers: Vec<SjfWorker<J>>,
+    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<J>>>>, Condvar)>,
+    workers: Vec<SjfWorker>,
 }
 
 impl <J> SjfPool<J>
@@ -35,7 +36,7 @@ where
         assert!(size > 0);
 
         // create the mutex protected min-heap and its condition variable
-        let heap = Arc::new((Mutex::new(BinaryHeap::new()),Condvar::new()));
+        let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())),Condvar::new()));
         let mut workers = Vec::with_capacity(size);
 
         // create the workers and pass them the heap
@@ -59,7 +60,10 @@ where
 
         // acquire the heap and push the new Job
         let mut heap_guard = mutex.lock().unwrap();
-        heap_guard.push(Reverse(job));
+
+        heap_guard.as_mut()
+            .unwrap()
+            .push(Reverse(job));
 
         // unlock the heap and notify one of the workers
         drop(heap_guard);
@@ -69,41 +73,100 @@ where
 
 }
 
-/// Worker struct to be used by Shortest Job First Scheduler
-pub struct SjfWorker<J>
+/// Drop trait used to gracefully shut down all worker threads.
+///
+impl<J> Drop for SjfPool<J>
 where
     J: Job + Ord + Send + 'static,
+{
+    fn drop(&mut self){
+
+        // acquire the mutex
+        let (mutex,cvar) = &*self.heap;
+        let mut heap_guard = mutex.lock().unwrap();
+
+        // take the heap out and notify all the threads
+        heap_guard.take();
+
+        cvar.notify_all();
+
+        // drop the guard
+        drop(heap_guard);
+
+        // join all worker threads
+        for worker in &mut self.workers{
+
+            let handle = worker.thread.take().unwrap();
+
+            handle.join().expect("Failed to join worker thread");
+
+        }
+
+    }
+}
+
+/// Worker struct to be used by Shortest Job First Scheduler.
+///
+pub struct SjfWorker
 {
     label: usize,
     thread: Option<JoinHandle<()>>,
 }
 
-impl<J> SjfWorker<J>
-where
-    J: Job + Ord + Send + 'static,
+impl SjfWorker
 {
+    /// Creates a new worker, with a passed heap and condition variable.
+    ///
+    pub fn new<J>(label: usize, heap:Arc<(Mutex<Option<BinaryHeap<Reverse<J>>>>,Condvar)>) -> Self
+    where
+        J: Job + Ord + Send + 'static,
+    {
 
-    pub fn new(label: usize, heap:Arc<(Mutex<BinaryHeap<Reverse<J>>>,Condvar)>) -> Self{
 
-        
         let thread = thread::spawn(move||{
 
+            // get a reference to the mutex and cond var
             let (mutex,cvar) = &*heap;
 
             loop{
 
+                // acquire the mutex
                 let mut heap_guard = mutex.lock().unwrap();
 
-                while heap_guard.is_empty(){
+                // Shut down case 1: after the pool drop is called the mutex is released and a thread might try to get a new job
+                // if the thread gets this mutex in the first instance we need to check if the heap still exits
+                if heap_guard.is_none(){
+                    break;
+                }
+
+                // while the heap exists and is empty wait
+                while let Some(heap) = heap_guard.as_mut(){
+
+                    // if the heap is not empty then there is a new job to be processed
+                    if !heap.is_empty(){
+                        break;
+                    }
+
                     heap_guard = cvar.wait(heap_guard).unwrap();
                 }
 
-                let job = heap_guard.pop().unwrap().0;
-                drop(heap_guard);
+                // Shut down case 2: while the worker was waiting for a new job, he gets notified by the pool drop and ends the while loop as the heap is None now
+                // So, check if the heap is none to know when to stop
+                if heap_guard.is_none(){
+                    break;
+                }
 
-                job.execute();
+                // when the heap is not empty extract the job release the mutex and execute the job
+
+                println!("Worker thread labeled {label} got a new job.");
+                if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
+                    drop(heap_guard);
+                    job.execute();
+                }
 
             }
+
+            println!("Worker thread labeled {label} shutting down.")
 
         });
 
