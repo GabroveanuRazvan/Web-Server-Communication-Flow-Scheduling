@@ -10,3 +10,4 @@ pub mod thread_pool;
 pub mod lru_cache;
 pub mod temp_file_manager;
 pub mod shortest_job_first_pool;
+pub mod mapped_file;

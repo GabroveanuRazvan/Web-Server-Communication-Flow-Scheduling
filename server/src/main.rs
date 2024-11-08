@@ -1,17 +1,7 @@
-
-
-use std::ffi::CString;
-use std::{mem, thread};
-use std::io::{BufReader, Read,Result};
-use std::net::{Ipv4Addr, SocketAddrV4};
-use std::thread::Thread;
-use std::time::Duration;
+use std::io::Result;
+use std::net::Ipv4Addr;
 use utils::sctp_server::{SctpServer, SctpServerBuilder};
-
-use libc::{in_addr_t, AF_INET};
-use utils::libc_wrappers::{debug_sctp_sndrcvinfo, debug_sockaddr, safe_inet_pton, SctpSenderInfo, SockAddrIn};
-use utils::sctp_api::{SctpEventSubscribe, events_to_u8, SctpPeerBuilder, SctpEventSubscribeBuilder};
-use std::ascii::escape_default;
+use utils::sctp_api::{SctpPeerBuilder, SctpEventSubscribeBuilder};
 use std::path::Path;
 //netstat -lnp | grep sctp
 
@@ -42,12 +32,11 @@ fn main() -> Result<()> {
 
     for stream in server.incoming(){
 
-        let stream = stream.unwrap();
+        let stream = stream?;
 
         //TODO thread pool
 
         SctpServer::handle_client(stream)?
-
 
     }
 

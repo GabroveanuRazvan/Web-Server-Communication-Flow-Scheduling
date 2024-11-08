@@ -6,25 +6,36 @@ use utils::shortest_job_first_pool::{Job, SjfPool};
 
 fn main() {
 
-    let mut sjf = SjfPool::new(4);
+    let file1 = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(false)
+        .truncate(false)
+        .open("test1.txt").unwrap();
 
+    let file2 = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(false)
+        .truncate(false)
+        .open("test1.txt").unwrap();
 
-    sjf.schedule_job(IntWrapper(6));
+    let mapped_file = MappedFile::new(file1).unwrap();
 
-    sjf.schedule_job(IntWrapper(5));
+    let job_file = MappedFileJob::new(mapped_file,Box::new(||{println!("Yey")}));
 
-    sjf.schedule_job(IntWrapper(4));
+    let mapped_file2 = MappedFile::new(file2).unwrap();
 
-    sjf.schedule_job(IntWrapper(3));
+    let mut job_file2 = MappedFileJob::new(mapped_file2,Box::new(||{println!("Yey")}));
 
-    sjf.schedule_job(IntWrapper(2));
+    println!("{:?}",job_file2.cmp(&job_file));
 
-    sjf.schedule_job(IntWrapper(1));
-
-    thread::sleep(std::time::Duration::from_secs(10));
+    job_file.execute();
 
 }
 use std::cmp::Ordering;
+use std::fs::{File, OpenOptions};
+use utils::mapped_file::{MappedFile, MappedFileJob};
 
 #[derive(Debug, Clone, Copy)]
 struct IntWrapper(i32);
@@ -54,7 +65,7 @@ impl Ord for IntWrapper {
 }
 
 impl Job for IntWrapper {
-    fn execute(&self) {
+    fn execute(self) {
         thread::sleep(std::time::Duration::from_secs(self.0 as u64));
         println!("{}", self.0);
     }

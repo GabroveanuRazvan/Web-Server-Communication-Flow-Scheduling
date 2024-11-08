@@ -2,10 +2,9 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 use indexmap::IndexMap;
-use memmap2::MmapMut;
 use crate::temp_file_manager::TempFileManager;
-use std::fs::File;
-use std::io;
+use crate::mapped_file::MappedFile;
+
 static MANAGER_PATH: &str = "/tmp/cache";
 
 /// File cache that maps the path of the file to a rc<mmap> smart pointer
@@ -63,7 +62,7 @@ impl TempFileCache {
         };
 
         // using the created and opened file create a memory map to it
-        let mut mapped_file = match MappedFile::new(file){
+        let mapped_file = match MappedFile::new(file){
             Ok(mapped_file) => mapped_file,
             Err(error) => panic!("Error while creating a mapped file: {}",error)
         };
@@ -104,51 +103,3 @@ impl TempFileCache {
 
 }
 
-/// Data structure used to store a file and its mapped content
-#[derive(Debug)]
-pub struct MappedFile{
-
-    file: File,
-    mmap: MmapMut,
-
-}
-
-impl MappedFile{
-    /// Create a new map from a given file
-    pub fn new(file: File) -> io::Result<Self>{
-
-        let mmap = unsafe{MmapMut::map_mut(&file)?};
-
-        Ok(Self{
-            file,
-            mmap,
-        })
-
-    }
-
-    /// Used to flush the written data on the disk
-    pub fn flush(&mut self) -> io::Result<()>{
-        self.mmap.flush()
-    }
-
-    /// Writes the new data at the end of the file
-    pub fn write_append(&mut self,data: &[u8]) -> io::Result<()>{
-
-        let current_file_size = self.file.metadata().unwrap().len() as usize;
-        let new_size = current_file_size + data.len();
-
-        self.file.set_len(new_size as u64).unwrap();
-
-        self.mmap = unsafe{MmapMut::map_mut(&self.file)?};
-
-        self.mmap[current_file_size..new_size].copy_from_slice(data);
-
-        Ok(())
-    }
-
-    /// Getter for the raw slice of bytes of the file
-    pub fn mmap_as_slice(&self) -> &[u8]{
-        &self.mmap
-    }
-
-}

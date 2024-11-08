@@ -1,15 +1,13 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
-use std::ops::DerefMut;
 use std::sync::{Arc, Condvar, Mutex};
-use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::thread::JoinHandle;
 
 /// Trait used mainly by SjfPool.
 pub trait Job{
     /// Each Job should be able to be executed.
-    fn execute(&self);
+    fn execute(self);
 }
 
 /// Shortest Job First Thread Pool.
@@ -159,7 +157,7 @@ impl SjfWorker
                 // when the heap is not empty extract the job release the mutex and execute the job
 
                 println!("Worker thread labeled {label} got a new job.");
-                if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
+                if let Some(Reverse(mut job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                     drop(heap_guard);
                     job.execute();
                 }

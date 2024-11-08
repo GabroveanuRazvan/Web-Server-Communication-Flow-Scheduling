@@ -132,7 +132,7 @@ impl SctpStream{
     }
 
     /// Method used to write data to a peer using a designated stream
-    pub fn write(&mut self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32) -> Result<usize>{
+    pub fn write(&self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32) -> Result<usize>{
 
         let mut sock_addr_c = sock_addr_to_c(&self.local_address());
 
@@ -143,7 +143,7 @@ impl SctpStream{
 
     }
     /// Method used to write all data to a peer using a designated stream
-    pub fn write_all(&mut self, buffer: &[u8], stream_number: u16, ppid: u32) -> Result<usize>{
+    pub fn write_all(&self, buffer: &[u8], stream_number: u16, ppid: u32) -> Result<usize>{
         let num_bytes = buffer.len();
 
         let mut sock_addr_c = sock_addr_to_c(&self.local_address());
@@ -155,7 +155,7 @@ impl SctpStream{
     }
 
     /// Method used to write the buffer in a loop using chunks of chunk_size bytes
-    pub fn write_chunked(&mut self, buffer: &[u8],chunk_size: usize, stream_number: u16, ppid: u32)-> Result<usize>{
+    pub fn write_chunked(&self, buffer: &[u8],chunk_size: usize, stream_number: u16, ppid: u32)-> Result<usize>{
         let mut sock_addr_c = sock_addr_to_c(&self.local_address());
 
         let mut total_bytes = 0usize;
@@ -169,7 +169,7 @@ impl SctpStream{
     }
 
     /// Method used to write one null terminated message to mark end of writing/reading to fellow peer
-    pub fn write_null(&mut self,stream_number: u16,ppid: u32) -> Result<usize>{
+    pub fn write_null(&self,stream_number: u16,ppid: u32) -> Result<usize>{
 
         let buffer: [u8;5] = [0;5];
 
@@ -179,26 +179,6 @@ impl SctpStream{
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
-
-    }
-
-    pub fn write_request(&mut self,request: Request<()>,stream_number: u16,ppid: u32) -> Result<usize>{
-
-        // get the string from a request
-        let request_str = http_request_to_string(request);
-
-        // send the string as bytes and return the result
-        self.write_all(&request_str.into_bytes(),stream_number,ppid)
-
-    }
-
-    pub fn write_response(&mut self,response: Response<()>,stream_number: u16,ppid: u32) -> Result<usize>{
-
-        // get the string from the response
-        let response_str = http_response_to_string(response);
-
-        // send the string as bytes and return the result
-        self.write_all(&response_str.into_bytes(),stream_number,ppid)
 
     }
 
