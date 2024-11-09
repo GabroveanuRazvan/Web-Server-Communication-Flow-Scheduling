@@ -1,13 +1,16 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+use std::fs::OpenOptions;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use crate::http_parsers::{basic_http_response, http_response_to_string};
-use crate::mapped_file::{MappedFile, MappedFileJob};
+use crate::http_parsers::{basic_http_response, http_response_to_string, string_to_http_request};
+use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
+use crate::mapped_file::{MappedFile};
 use crate::sctp_client::SctpStream;
-use crate::shortest_job_first_pool::{Job, SjfPool};
 
+/// Shortest Job First scheduler for a Sctp Stream.
+///
 pub struct ConnectionScheduler{
 
     heap: Arc<(Mutex<Option<BinaryHeap<Reverse<MappedFile>>>>,Condvar)>,
@@ -18,6 +21,8 @@ pub struct ConnectionScheduler{
 
 impl ConnectionScheduler{
 
+    /// Creates a worker pool of size and takes a Sctp Stream.
+    ///
     pub fn new(size: usize, stream: SctpStream)-> Self{
         assert!(size > 0);
 
@@ -37,8 +42,79 @@ impl ConnectionScheduler{
 
     }
 
+    /// Pushes on the scheduler min-heap a new MappedFile as a job.
+    pub fn schedule_job(&self,job: MappedFile){
+        // get a reference to the heap and condition variable
+        let (mutex,cvar) = &*self.heap;
+
+        // acquire the heap and push the new Job
+        let mut heap_guard = mutex.lock().unwrap();
+
+        heap_guard.as_mut()
+            .unwrap()
+            .push(Reverse(job));
+
+        // unlock the heap and notify one of the workers
+        drop(heap_guard);
+        cvar.notify_one();
+    }
+
+    /// Method that consumes and starts the scheduler.
+    /// Reads the requests from the Sctp Stream, process them and schedule them.
+    ///
+    pub fn start(self){
+        let mut buffer: Vec<u8> = vec![0;4096];
+        let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
+
+
+        loop {
+
+            let bytes_read = self.stream.read(&mut buffer, Some(&mut sender_info), None).unwrap();
+
+            if bytes_read == 0 {
+                break;
+            }
+
+            println!("Read {bytes_read} bytes");
+
+            debug_sctp_sndrcvinfo(&sender_info);
+
+            let request = string_to_http_request(&String::from_utf8(buffer.clone()).unwrap());
+
+            println!("{} {}", request.method().to_string(), request.uri().to_string());
+
+            let mut method = request.method().to_string();
+            let mut path = request.uri().path().to_string();
+
+            if method == "GET" {
+                path = match path.as_str() {
+                    "/" => "./index.html".to_string(),
+                    _ => {
+                        String::from(".") + &path
+                    }
+                }
+            } else {
+                path = "./404.html".to_string();
+            }
+
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(path).unwrap();
+
+            let mapped_file = MappedFile::new(file).unwrap();
+
+            self.schedule_job(mapped_file);
+
+        }
+    }
+
 }
 
+/// Drop trait used to gracefully shut down all worker threads.
+///
 impl Drop for ConnectionScheduler
 {
     fn drop(&mut self){
@@ -67,12 +143,16 @@ impl Drop for ConnectionScheduler
     }
 }
 
+/// Worker for the ConnectionScheduler.
+///
 pub struct ConnectionWorker{
     label: usize,
     thread: Option<JoinHandle<()>>,
 }
 
 impl ConnectionWorker{
+    /// Starts the worker thread.
+    ///
     pub fn new(label: usize,heap: Arc<(Mutex<Option<BinaryHeap<Reverse<MappedFile>>>>,Condvar)>, stream: Arc<SctpStream>) -> Self{
 
         let thread = thread::spawn(move||{
@@ -114,6 +194,7 @@ impl ConnectionWorker{
                 if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                     drop(heap_guard);
 
+                    // create the response and send it
                     let mut response_bytes = http_response_to_string(basic_http_response(job.file_size())).into_bytes();
                     let stream_number = label as u16;
 

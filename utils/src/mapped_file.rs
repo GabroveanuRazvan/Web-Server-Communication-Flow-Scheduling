@@ -71,13 +71,13 @@ impl PartialEq for MappedFile{
 impl Eq for MappedFile{}
 
 impl PartialOrd for MappedFile{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering>{
         Some(self.cmp(other))
     }
 }
 
 impl Ord for MappedFile{
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering{
+    fn cmp(&self, other: &Self) -> Ordering{
         self.file_size.cmp(&other.file_size)
     }
 }

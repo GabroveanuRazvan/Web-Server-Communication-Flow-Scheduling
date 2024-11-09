@@ -59,9 +59,6 @@ impl SctpProxy{
             sctp_client.options();
 
 
-
-            //TODO thread pool
-
             Self::handle_client(stream,sctp_client,&mut cache)
 
 
@@ -163,7 +160,7 @@ impl SctpProxy{
                                 panic!("Tcp write error: {}", error);
                             }
 
-                            // println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
+                            println!("Received on stream {}",sender_info.sinfo_stream)
                         }
                     }
 
@@ -191,12 +188,11 @@ impl SctpProxy{
                                 // write to tcp stream
                                tcp_stream.write(&buffer[..n]).expect("Tcp stream write error");
 
-                                // println!("Sctp received message of size {n}:\n{}", String::from_utf8_lossy(&buffer[..n]));
+                                println!("Received on stream {}",sender_info.sinfo_stream)
                             }
                         }
                     }
 
-                    // TODO se trimite request la browser abia dupa ce am facut prefetching nu inainte
 
                     // after caching the file it's time to do some prefetching
 
@@ -261,6 +257,7 @@ impl SctpProxy{
 
                                         // write to temporary file
                                         mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+                                        println!("Received on stream {}",sender_info.sinfo_stream)
 
                                     }
                                 }

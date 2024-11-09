@@ -102,35 +102,6 @@ impl SctpStream{
 
     }
 
-    pub fn read_request(&mut self,buffer_size: usize) -> Result<(Request<()>,usize)>{
-
-        // read the request into the buffer
-        let mut buffer = vec![0u8;buffer_size];
-
-        let num_bytes = self.read(&mut buffer,None,None)?;
-
-        // get a string from the buffer and parse it
-        let str_request = String::from_utf8_lossy(&buffer[..num_bytes]);
-
-        let request = string_to_http_request(str_request.as_ref());
-
-        Ok((request,num_bytes))
-    }
-
-    pub fn read_response(&mut self,buffer_size: usize) -> Result<(Response<()>,usize)>{
-        // read the response into the buffer
-        let mut buffer = vec![0u8;buffer_size];
-
-        let num_bytes = self.read(&mut buffer,None,None)?;
-
-        // get a string from the buffer and parse it
-        let str_response = String::from_utf8_lossy(&buffer[..num_bytes]);
-
-        let response = string_to_http_response(str_response.as_ref());
-
-        Ok((response,num_bytes))
-    }
-
     /// Method used to write data to a peer using a designated stream
     pub fn write(&self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32) -> Result<usize>{
 
