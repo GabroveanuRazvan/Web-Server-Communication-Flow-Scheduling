@@ -1,21 +1,17 @@
 use std::env::{current_dir, set_current_dir};
-use std::fs::{File, OpenOptions};
 use std::io::{Error, Read, Result};
-use std::mem;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::Path;
 use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
-use memmap2::Mmap;
-use crate::connection_sheduler::ConnectionScheduler;
-use crate::mapped_file::{MappedFile, MappedFileJob};
+use crate::connection_scheduler::ConnectionScheduler;
 use crate::sctp_client::SctpStream;
-use crate::shortest_job_first_pool::SjfPool;
 use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
 use super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo, safe_close};
-use super::http_parsers::{basic_http_response, string_to_http_request, http_response_to_string};
 
 const BUFFER_SIZE: usize = 4096;
 const CHUNK_SIZE: usize = 2048;
+const THREAD_POOL_SIZE: usize = 4;
+
 #[derive(Debug)]
 pub struct SctpServer {
     sock_fd: i32,
@@ -109,77 +105,9 @@ impl SctpServer{
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        let mut scheduler = ConnectionScheduler::new(4,stream);
+        let mut scheduler = ConnectionScheduler::new(THREAD_POOL_SIZE,stream,BUFFER_SIZE,CHUNK_SIZE);
 
         scheduler.start();
-
-        // let mut buffer: Vec<u8> = vec![0; BUFFER_SIZE];
-        // let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
-        //
-        //
-        // loop{
-        //
-        //     let bytes_read = stream.read(&mut buffer,Some(&mut sender_info),None)?;
-        //
-        //     if bytes_read == 0{
-        //         break;
-        //     }
-        //
-        //     println!("Read {bytes_read} bytes");
-        //
-        //     debug_sctp_sndrcvinfo(&sender_info);
-        //
-        //     let request = string_to_http_request(&String::from_utf8(buffer.clone()).unwrap());
-        //
-        //     println!("{} {}",request.method().to_string(),request.uri().to_string());
-        //
-        //     let mut method = request.method().to_string();
-        //     let mut path = request.uri().path().to_string();
-        //
-        //     if method == "GET"{
-        //
-        //         path = match path.as_str(){
-        //             "/" => "./index.html".to_string(),
-        //             _ => {
-        //                 String::from(".") + &path
-        //             }
-        //         }
-        //
-        //     }
-        //     else{
-        //         path = "./404.html".to_string();
-        //     }
-        //
-        //
-        //
-        //     let file = File::open(path)?;
-        //
-        //     let file_buffer = unsafe{Mmap::map(&file)?};
-        //
-        //     let response_body_size = file_buffer.len();
-        //
-        //     let mut response_bytes = http_response_to_string(basic_http_response(response_body_size)).into_bytes();
-        //     let response_size = response_bytes.len();
-        //
-        //     // send the header of the html response
-        //     match stream.write(&mut response_bytes,response_size,0,2){
-        //         Ok(bytes) => println!("Wrote {bytes}"),
-        //         Err(e) => println!("Write Error: {:?}",e)
-        //     }
-        //
-        //     // send the body of the response
-        //     match stream.write_chunked(&file_buffer,CHUNK_SIZE,0,2){
-        //         Ok(bytes) => println!("Wrote {bytes}"),
-        //         Err(e) => println!("Write Error: {:?}",e)
-        //     }
-        //
-        //     // send a null character to mark the end of the message
-        //     match stream.write_null(0,2){
-        //         Ok(bytes) => println!("Wrote {bytes}"),
-        //         Err(e) => println!("Write Error: {:?}",e)
-        //     }
-        //
-        // }
 
         Ok(())
     }
