@@ -83,7 +83,7 @@ impl SctpStream{
     }
 
     /// Method used to read data from the socket, stores the client address and info
-    pub fn read(&mut self, buffer: &mut [u8],
+    pub fn read(&self, buffer: &mut [u8],
                 sender_info: Option<&mut SctpSenderInfo>,
                 flags: Option<&mut i32>) ->Result<usize>{
 

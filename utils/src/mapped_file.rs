@@ -1,6 +1,9 @@
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io;
 use memmap2::MmapMut;
+use crate::http_parsers::{basic_http_response, http_response_to_string};
+use crate::sctp_client::SctpStream;
 use crate::shortest_job_first_pool::Job;
 
 /// Data structure used to store a file and its mapped content
@@ -59,16 +62,38 @@ impl MappedFile{
 
 }
 
-pub struct MappedFileJob{
-    mapped_file: MappedFile,
-    job: Box<dyn FnOnce() + Send + 'static>,
+impl PartialEq for MappedFile{
+    fn eq(&self, other: &Self) -> bool{
+        self.file_size == other.file_size
+    }
 }
 
-impl MappedFileJob{
-    pub fn new(mapped_file: MappedFile,job: Box<dyn FnOnce() + Send + 'static>) -> Self{
+impl Eq for MappedFile{}
+
+impl PartialOrd for MappedFile{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>{
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MappedFile{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering{
+        self.file_size.cmp(&other.file_size)
+    }
+}
+
+const CHUNK_SIZE: usize = 2048;
+
+pub struct MappedFileJob<'a> {
+    mapped_file: MappedFile,
+    stream: &'a SctpStream
+}
+
+impl<'a> MappedFileJob<'a>{
+    pub fn new(mapped_file: MappedFile,sctp_stream: &'a SctpStream) -> Self{
         Self{
             mapped_file,
-            job,
+            stream: sctp_stream
         }
     }
 
@@ -77,27 +102,48 @@ impl MappedFileJob{
     }
 }
 
-impl Job for MappedFileJob{
+impl<'a>  Job for MappedFileJob<'a>{
     fn execute(mut self) {
-        (self.job)();
+        let response_body_size = self.mapped_file.file_size();
+
+        let mut response_bytes = http_response_to_string(basic_http_response(response_body_size)).into_bytes();
+        let response_size = response_bytes.len();
+
+        // send the header of the html response
+        match self.stream.write(&mut response_bytes,response_size,0,2){
+            Ok(bytes) => println!("Wrote {bytes}"),
+            Err(e) => println!("Write Error: {:?}",e)
+        }
+
+        // send the body of the response
+        match self.stream.write_chunked(&self.mapped_file.mmap_as_slice(),CHUNK_SIZE,0,2){
+            Ok(bytes) => println!("Wrote {bytes}"),
+            Err(e) => println!("Write Error: {:?}",e)
+        }
+
+        // send a null character to mark the end of the message
+        match self.stream.write_null(0,2){
+            Ok(bytes) => println!("Wrote {bytes}"),
+            Err(e) => println!("Write Error: {:?}",e)
+        }
     }
 }
 
-impl PartialEq for MappedFileJob{
+impl<'a>  PartialEq for MappedFileJob<'a> {
     fn eq(&self, other: &Self) -> bool{
         self.mapped_file.file_size == other.mapped_file.file_size
     }
 }
 
-impl Eq for MappedFileJob{}
+impl <'a>Eq for MappedFileJob<'a>{}
 
-impl PartialOrd for MappedFileJob{
+impl <'a> PartialOrd for MappedFileJob<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>{
         Some(self.cmp(other))
     }
 }
 
-impl Ord for MappedFileJob{
+impl <'a> Ord for MappedFileJob<'a> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering{
         self.mapped_file.file_size.cmp(&other.mapped_file.file_size)
     }
