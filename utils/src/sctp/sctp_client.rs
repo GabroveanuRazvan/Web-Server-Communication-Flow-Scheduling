@@ -1,11 +1,9 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{close, recvmsg, IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
+use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
 use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
-use http::{Request, Response};
-use crate::http_parsers::{http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 
 #[derive(Debug)]
 pub struct SctpStream{

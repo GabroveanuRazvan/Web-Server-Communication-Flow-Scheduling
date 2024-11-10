@@ -1,12 +1,12 @@
-use std::env::{current_dir, set_current_dir};
-use std::io::{Error, Read, Result};
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::env::set_current_dir;
+use std::io::Result;
+use std::net::Ipv4Addr;
 use std::path::Path;
-use libc::{AF_INET, close, IPPROTO_SCTP, SCTP_EVENTS, SCTP_ASSOCINFO, socklen_t};
+use libc::{IPPROTO_SCTP, SCTP_EVENTS};
 use crate::pools::connection_scheduler::ConnectionScheduler;
 use crate::sctp::sctp_client::SctpStream;
-use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, safe_sctp_recvmsg, sctp_opt_info, SctpEventSubscribe, events_to_u8, safe_sctp_sendmsg, SctpPeerBuilder, safe_sctp_connectx, events_to_u8_mut};
-use super::super::libc_wrappers::{SockAddrIn, safe_inet_pton, debug_sockaddr, safe_listen, SctpSenderInfo, safe_setsockopt, safe_accept, new_sock_addr_in, sock_addr_to_c, c_to_sock_addr, debug_sctp_sndrcvinfo, safe_getsockopt, new_sctp_sndrinfo, safe_close};
+use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
+use super::super::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
 
 const BUFFER_SIZE: usize = 4096;
 const CHUNK_SIZE: usize = 2048;

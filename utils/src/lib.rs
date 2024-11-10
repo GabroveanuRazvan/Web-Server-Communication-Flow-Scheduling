@@ -3,6 +3,7 @@ pub mod libc_wrappers;
 pub mod http_parsers;
 
 pub mod mapped_file;
+mod constants;
 
 pub mod sctp{
     pub mod sctp_client;
