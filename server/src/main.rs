@@ -1,7 +1,7 @@
 use std::io::Result;
 use std::net::Ipv4Addr;
-use utils::sctp_server::{SctpServer, SctpServerBuilder};
-use utils::sctp_api::{SctpPeerBuilder, SctpEventSubscribeBuilder};
+use utils::sctp::sctp_server::{SctpServer, SctpServerBuilder};
+use utils::sctp::sctp_api::{SctpPeerBuilder, SctpEventSubscribeBuilder};
 use std::path::Path;
 //netstat -lnp | grep sctp
 
@@ -33,8 +33,6 @@ fn main() -> Result<()> {
     for stream in server.incoming(){
 
         let stream = stream?;
-
-        //TODO thread pool
 
         SctpServer::handle_client(stream)?
 
