@@ -68,6 +68,10 @@ impl TempFileCache {
 
         let data_size = data.len();
 
+        if data_size > self.capacity {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Exceeded capacity"));
+        }
+
         // check if the file exists
         let mut mapped_file = match self.get(&key){
             Some(mapped_file) => mapped_file,

@@ -9,10 +9,10 @@ use libc::mmap;
 use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
-use crate::constants::KILOBYTE;
+use crate::constants::{KILOBYTE, MEGABYTE};
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
-const CACHE_CAPACITY: usize = 30;
+const CACHE_CAPACITY: usize = 100 * MEGABYTE;
 const CHUNK_SIZE: usize = 64 * KILOBYTE;
 
 /// Abstraction for a tcp to sctp proxy
@@ -137,9 +137,6 @@ impl SctpProxy{
 
                     let mut sender_info = new_sctp_sndrinfo();
 
-                    let mapped_file = cache.get(&uri).unwrap();
-                    let mut mmap_ptr = mapped_file.borrow_mut();
-
                     //read the response
                     match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
@@ -150,8 +147,8 @@ impl SctpProxy{
                         // response received
                         Ok(n) =>{
 
-                            // write to temporary file
-                            mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+                            // write the response header into the cache
+                            cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
 
                             // write into tcp stream
                             if let Err(error) = tcp_stream.write(&buffer[..n]){
@@ -181,7 +178,7 @@ impl SctpProxy{
                             Ok(n) =>{
 
                                 // write to temporary file
-                                mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+                                cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
 
                                 // write to tcp stream
                                tcp_stream.write(&buffer[..n]).expect("Tcp stream write error");
@@ -194,9 +191,13 @@ impl SctpProxy{
 
                     // after caching the file it's time to do some prefetching
 
+                    let mapped_file = cache.get(&uri).unwrap();
+                    let borrowed_mapped_file = mapped_file.borrow();
+                    let mmap_ptr = borrowed_mapped_file.mmap_as_slice();
+
                     if uri.ends_with(".html"){
 
-                        let future_uri = extracts_http_paths(String::from_utf8_lossy(mmap_ptr.mmap_as_slice()).as_ref());
+                        let future_uri = extracts_http_paths(String::from_utf8_lossy(mmap_ptr).as_ref());
 
                         for uri in future_uri {
 
@@ -211,8 +212,6 @@ impl SctpProxy{
                             // insert the new value into the cache
                             cache.insert(uri.clone());
 
-                            let mut mapped_file = cache.get(&uri).unwrap();
-                            let mut mmap_ptr = mapped_file.borrow_mut();
 
                             // get a string request and send it to the server
                             let request = http_request_to_string(basic_http_get_request(&uri));
@@ -231,7 +230,7 @@ impl SctpProxy{
                                 // response received
                                 Ok(n) =>{
                                     // write to temporary file
-                                    mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+                                    cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
 
                                 }
                             }
@@ -254,7 +253,7 @@ impl SctpProxy{
                                     Ok(n) =>{
 
                                         // write to temporary file
-                                        mmap_ptr.write_append(&buffer[..n]).expect("Temporary file write error");
+                                        cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
                                         println!("Received on stream {}",sender_info.sinfo_stream)
 
                                     }
