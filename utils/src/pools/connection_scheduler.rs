@@ -79,13 +79,11 @@ impl ConnectionScheduler{
                 break;
             }
 
-            println!("Read {bytes_read} bytes");
-
             debug_sctp_sndrcvinfo(&sender_info);
 
             let request = string_to_http_request(&String::from_utf8(buffer.clone()).unwrap());
 
-            println!("{} {}", request.method().to_string(), request.uri().to_string());
+            println!("Request received: {} {}", request.method().to_string(), request.uri().to_string());
 
             let mut method = request.method().to_string();
             let mut path = request.uri().path().to_string();
@@ -212,19 +210,19 @@ impl ConnectionWorker{
                     let stream_number = label as u16;
 
                     match stream.write_all(&mut response_bytes,stream_number,0){
-                        Ok(bytes) => println!("Wrote {bytes}"),
+                        Ok(_bytes) => (),
                         Err(e) => println!("Write Error: {:?}",e)
                     }
 
                     // send the body of the response
                     match stream.write_chunked(&job.mmap_as_slice(),chunk_size,stream_number,0){
-                        Ok(bytes) => println!("Wrote {bytes}"),
+                        Ok(_bytes) => (),
                         Err(e) => println!("Write Error: {:?}",e)
                     }
 
                     // send a null character to mark the end of the message
                     match stream.write_null(stream_number,0){
-                        Ok(bytes) => println!("Wrote {bytes}"),
+                        Ok(_bytes) => (),
                         Err(e) => println!("Write Error: {:?}",e)
                     }
 

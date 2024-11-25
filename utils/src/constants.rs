@@ -12,3 +12,8 @@ pub static SERVER_PATH: OnceLock<String> = OnceLock::new();
 pub static SERVER_IPV4: OnceLock<Ipv4Addr> = OnceLock::new();
 pub static MAX_CONNECTIONS: OnceLock<u16> = OnceLock::new();
 pub static CACHE_MANAGER_PATH: OnceLock<String> = OnceLock::new();
+
+
+pub const BYTE: usize = 1;
+pub const KILOBYTE: usize = 1024 * BYTE;
+pub const MEGABYTE: usize = KILOBYTE * 1024;

@@ -5,12 +5,12 @@ use std::path::Path;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS};
 use crate::pools::connection_scheduler::ConnectionScheduler;
 use crate::sctp::sctp_client::SctpStream;
-use super::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
-use super::super::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
-
-const BUFFER_SIZE: usize = 4096;
-const CHUNK_SIZE: usize = 2048;
-const THREAD_POOL_SIZE: usize = 4;
+use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
+use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
+use crate::constants::{KILOBYTE};
+const BUFFER_SIZE: usize = 64 * KILOBYTE;
+const CHUNK_SIZE: usize = 64 * KILOBYTE;
+const THREAD_POOL_SIZE: usize = 6;
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -115,6 +115,7 @@ impl SctpServer{
 }
 
 /// Used to gracefully close the socket descriptor when the server goes out of scope
+/// 
 impl Drop for SctpServer{
     fn drop(&mut self){
 

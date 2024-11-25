@@ -7,7 +7,7 @@ use std::path::Path;
 
 const MAX_CONNECTIONS: u16 = 100;
 const PORT: u16 = 7878;
-const IPV4: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
+const IPV4: Ipv4Addr = Ipv4Addr::UNSPECIFIED;
 const PATH_STR: &str = "./web_files";
 
 fn main() -> Result<()> {

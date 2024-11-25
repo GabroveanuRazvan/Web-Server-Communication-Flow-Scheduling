@@ -9,10 +9,11 @@ use libc::mmap;
 use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
+use crate::constants::KILOBYTE;
 
-const BUFFER_SIZE: usize = 4096;
-const CACHE_CAPACITY: usize = 20;
-const CHUNK_SIZE: usize = 2048;
+const BUFFER_SIZE: usize = 64 * KILOBYTE;
+const CACHE_CAPACITY: usize = 30;
+const CHUNK_SIZE: usize = 64 * KILOBYTE;
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
@@ -96,9 +97,6 @@ impl SctpProxy{
                 // request received
                 Ok(n) => {
                     let received_message = String::from_utf8_lossy(&buffer[..n]);
-
-                    println!("Got Bytes: {n}");
-                    // println!("Tcp Client received request:\n{}", received_message);
 
                     // get the uri
                     let mut uri = string_to_http_request(received_message.as_ref())

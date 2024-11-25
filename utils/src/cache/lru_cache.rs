@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use crate::cache::temp_file_manager::TempFileManager;
 use crate::mapped_file::MappedFile;
 
-static MANAGER_PATH: &str = "/tmp/cache";
+static MANAGER_PATH: &str = "/tmp/tmpfs/cache";
 
 /// File cache that maps the path of the file to a rc<mmap> smart pointer
 #[derive(Debug)]
@@ -48,7 +48,7 @@ impl TempFileCache {
             // obtain the first key
             let (key,_) = self.ordered_map.first().unwrap();
             // evict the temporary file
-            self.file_manager.evict(key);
+            self.file_manager.evict(key).expect("Key eviction error");
 
             // remove oldest entry
             self.ordered_map.shift_remove_index(0);

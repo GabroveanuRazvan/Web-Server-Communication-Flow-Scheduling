@@ -1,22 +1,31 @@
-use std::net::Ipv4Addr;
-use std::sync::OnceLock;
 
-static IP_ADDRESSES: OnceLock<Vec<Ipv4Addr>> = OnceLock::new();
+fn main() ->Result<(),std::io::Error>{
 
-fn initialize_ips() -> Vec<Ipv4Addr> {
-    vec![
-        Ipv4Addr::new(192, 168, 0, 1),
-        Ipv4Addr::new(192, 168, 0, 2),
-        Ipv4Addr::new(192, 168, 0, 3),
-    ]
+    // mount_tmpfs("mytmpfs",100)?;
+
+
+    let command = Command::new("sudo mount")
+        .args(["-t", "tmpfs", "-o", &format!("size={}M", 110), "tmpfs", "mytmpfs"]);
+    let args = command.get_args();
+
+    println!("{:?}", command);
+
+    Ok(())
+}
+use std::process::Command;
+use std::fs;
+
+
+fn mount_tmpfs(mount_point: &str, size: i32) -> Result<(), std::io::Error> {
+    fs::create_dir_all(mount_point)?;
+    Command::new("sudo mount")
+        .args(["-t", "tmpfs", "-o", &format!("size={}M", size), "tmpfs", mount_point])
+        .status()?;
+    Ok(())
 }
 
-fn get_ip_addresses() -> &'static Vec<Ipv4Addr> {
-    IP_ADDRESSES.get_or_init(|| initialize_ips())
-}
-
-fn main() {
-    // Accesăm variabila IP_ADDRESSES, care va fi inițializată la primul acces
-    let ips = get_ip_addresses();
-    println!("IP addresses: {:?}", ips);
+fn umount_tmpfs(mount_point: &str) -> Result<(), std::io::Error> {
+    Command::new("umount").arg(mount_point).status()?;
+    fs::remove_dir_all(mount_point)?;
+    Ok(())
 }
