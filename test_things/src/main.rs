@@ -1,31 +1,28 @@
+use std::io;
+use std::thread::sleep;
+use utils::cache::lru_cache::TempFileCache;
+use utils::constants::{BYTE, KILOBYTE};
 
 fn main() ->Result<(),std::io::Error>{
 
-    // mount_tmpfs("mytmpfs",100)?;
+    let mut cache = TempFileCache::new(10 * BYTE);
+
+    cache.insert("mere".to_string());
+    cache.write_append("mere",b"12345")?;
+
+    cache.insert("mere2".to_string());
+    cache.write_append("mere2",b"12345")?;
+
+    cache.insert("altceva".to_string());
+    cache.write_append("altceva",b"123456789")?;
+
+    println!("{:?}",cache);
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input) // Citim input-ul de la tastatură
+        .expect("Eroare la citirea liniei");
 
 
-    let command = Command::new("sudo mount")
-        .args(["-t", "tmpfs", "-o", &format!("size={}M", 110), "tmpfs", "mytmpfs"]);
-    let args = command.get_args();
-
-    println!("{:?}", command);
-
-    Ok(())
-}
-use std::process::Command;
-use std::fs;
-
-
-fn mount_tmpfs(mount_point: &str, size: i32) -> Result<(), std::io::Error> {
-    fs::create_dir_all(mount_point)?;
-    Command::new("sudo mount")
-        .args(["-t", "tmpfs", "-o", &format!("size={}M", size), "tmpfs", mount_point])
-        .status()?;
-    Ok(())
-}
-
-fn umount_tmpfs(mount_point: &str) -> Result<(), std::io::Error> {
-    Command::new("umount").arg(mount_point).status()?;
-    fs::remove_dir_all(mount_point)?;
     Ok(())
 }
