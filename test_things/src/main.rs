@@ -2,27 +2,33 @@ use std::io;
 use std::thread::sleep;
 use utils::cache::lru_cache::TempFileCache;
 use utils::constants::{BYTE, KILOBYTE};
+use utils::sctp::sctp_client::SctpPacketData;
 
-fn main() ->Result<(),std::io::Error>{
+fn main(){
 
-    let mut cache = TempFileCache::new(10 * BYTE);
+    let mut buffer = [0;1 * KILOBYTE];
 
-    cache.insert("mere".to_string());
-    cache.write_append("mere",b"12345")?;
+    let a = SctpPacketData::new(&buffer,0,0,0,0);
 
-    cache.insert("mere2".to_string());
-    cache.write_append("mere2",b"12345")?;
+    for chunk in a.buffer.chunks(128){
 
-    cache.insert("altceva".to_string());
-    cache.write_append("altceva",b"123456789")?;
+        let b = SctpPacketData::new(&chunk,0,0,0,0);
+        println!("{b:?}")
 
-    println!("{:?}",cache);
+    }
 
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input) // Citim input-ul de la tastatură
-        .expect("Eroare la citirea liniei");
+    read1(&mut buffer);
+
+    println!("{buffer:?}")
 
 
-    Ok(())
+}
+
+fn read1(buf: &mut [u8]){
+    buf[0] = 1;
+    read2(buf)
+}
+
+fn read2(buf: &mut [u8]){
+    buf[1] = 2;
 }
