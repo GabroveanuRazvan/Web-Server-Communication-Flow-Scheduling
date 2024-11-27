@@ -61,6 +61,37 @@ impl TempFileCache {
 
     }
 
+    /// Makes room for a future file that will be inserted into the cache based on its size.
+    /// Returns an Err() if the file exceeds the cache capacity
+    pub fn make_room(&mut self,file_size: usize) -> Result<()>{
+
+        if file_size > self.capacity{
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "File size larger than the cache capacity"))
+        }
+
+        // while the cache cannot contain the new file, evict files
+        while file_size + self.size > self.capacity{
+
+            // obtain the first key
+            let (key,mapped_file) = self.ordered_map.first().unwrap();
+
+            // get the evicted file size
+            let mmap_ptr = mapped_file.borrow();
+            let evicted_file_size = mmap_ptr.file_size();
+
+            // evict the temporary file and decrement the current cache size
+            self.file_manager.evict(key).expect("Key eviction error");
+            self.size -= evicted_file_size;
+
+            // drop so that the borrow checker will not yell at me
+            drop(mmap_ptr);
+            // remove oldest entry
+            self.ordered_map.shift_remove_index(0);
+        }
+
+        Ok(())
+    }
+
     /// Writes the data buffer to the chosen file if it exists.
     /// Evicts least recently used files while the cache cannot hold the new capacity.
     /// Affects the map state as the file that is written into is not supposed to be evicted in case the cache is full.

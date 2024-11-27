@@ -1,34 +1,21 @@
-use std::io;
-use std::thread::sleep;
+use std::net::Ipv4Addr;
+use std::sync::Arc;
+use std::thread;
 use utils::cache::lru_cache::TempFileCache;
-use utils::constants::{BYTE, KILOBYTE};
-use utils::sctp::sctp_client::SctpPacketData;
+use utils::constants::BYTE;
+use utils::sctp::sctp_api::{SctpEventSubscribe, SctpPeerBuilder};
+use utils::sctp::sctp_client::SctpStreamBuilder;
 
-fn main(){
+fn main() {
 
-    let mut buffer = [0;1 * KILOBYTE];
+    let mut cache = TempFileCache::new(10 * BYTE);
 
-    let a = SctpPacketData::new(&buffer,0,0,0,0);
-
-    for chunk in a.buffer.chunks(128){
-
-        let b = SctpPacketData::new(&chunk,0,0,0,0);
-        println!("{b:?}")
-
+    for i in 0..9{
+        cache.insert(format!("mere{i}").to_string());
+        cache.write_append(&format!("mere{i}").to_string(),b"1").unwrap()
     }
 
-    read1(&mut buffer);
-
-    println!("{buffer:?}")
-
-
-}
-
-fn read1(buf: &mut [u8]){
-    buf[0] = 1;
-    read2(buf)
-}
-
-fn read2(buf: &mut [u8]){
-    buf[1] = 2;
+    println!("{cache:#?}");
+    cache.make_room(10);
+    println!("{cache:#?}");
 }

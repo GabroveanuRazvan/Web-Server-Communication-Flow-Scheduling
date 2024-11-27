@@ -69,7 +69,7 @@ impl SctpProxy{
     }
 
     /// Client handler method
-    fn handle_client(mut tcp_stream: TcpStream, mut sctp_client: SctpStream,cache: &mut TempFileCache){
+    fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream,cache: &mut TempFileCache){
 
         // used to RR over the streams
         let mut stream_number = 0u16;
@@ -81,6 +81,8 @@ impl SctpProxy{
         loop{
 
             println!("Tcp listener waiting for messages...");
+
+            //TODO main thread de read de la browser
 
             // the tcp stream waits for a request
             match tcp_stream.read(&mut buffer){
@@ -129,6 +131,8 @@ impl SctpProxy{
                     // create a cache entry
                     cache.insert(uri.clone());
 
+                    // TODO aici vine un thread care trimite cererile (nu in interiorul threadului principal)
+
                     // send the request
                     sctp_client.write(&mut buffer[..],n,stream_number,0).expect("Sctp Client write error");
 
@@ -136,6 +140,8 @@ impl SctpProxy{
                     stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
 
                     let mut sender_info = new_sctp_sndrinfo();
+
+                    // TODO aici vine threadul de receptie care o sa faca in loop read cu select
 
                     //read the response
                     match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
@@ -159,7 +165,7 @@ impl SctpProxy{
                         }
                     }
 
-
+                    // TODO tot threadul de receptie
                     // now loop to receive the chunked response body
                     loop{
                         // the sctp-stream waits to get a response
@@ -188,7 +194,7 @@ impl SctpProxy{
                         }
                     }
 
-
+                    // TODO aici o sa vina thread poolul de download inauntrul threadului de receptie; fiecare thread face send si read
                     // after caching the file it's time to do some prefetching
 
                     let mapped_file = cache.get(&uri).unwrap();
@@ -229,6 +235,11 @@ impl SctpProxy{
 
                                 // response received
                                 Ok(n) =>{
+
+                                    let response = string_to_http_response(String::from_utf8_lossy(&buffer[..n]).as_ref());
+                                    let content_length = response.headers().get("Content-Length").unwrap().to_str().unwrap().parse::<u64>().unwrap();
+                                    println!("Received SCTP response length {content_length} from {uri}");
+
                                     // write to temporary file
                                     cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
 

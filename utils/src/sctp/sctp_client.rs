@@ -297,21 +297,17 @@ impl SctpPeerBuilder for SctpStreamBuilder {
 }
 
 #[derive(Debug)]
-pub struct SctpPacketData<'a>{
-    pub buffer: &'a [u8],
-    pub buffer_size: usize,
+pub struct SctpPacketData{
     pub stream_number: u16,
     pub ppid: u32,
     pub flags: u32,
     pub context:u32,
 }
 
-impl<'a> SctpPacketData<'a>{
-    pub fn new(buffer: &'a [u8], stream_number: u16, flags: u32, ppid: u32, context: u32) -> Self{
+impl SctpPacketData{
+    pub fn new(stream_number: u16, flags: u32, ppid: u32, context: u32) -> Self{
 
         Self{
-            buffer,
-            buffer_size: buffer.len(),
             stream_number,
             flags,
             ppid,
