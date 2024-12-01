@@ -1,21 +1,19 @@
-use std::net::Ipv4Addr;
-use std::sync::Arc;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::mpsc;
 use std::thread;
-use utils::cache::lru_cache::TempFileCache;
-use utils::constants::BYTE;
-use utils::sctp::sctp_api::{SctpEventSubscribe, SctpPeerBuilder};
-use utils::sctp::sctp_client::SctpStreamBuilder;
+use utils::libc_wrappers::safe_dup;
+use utils::sctp::sctp_api::SctpPeerBuilder;
+use utils::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 
-fn main() {
+fn main(){
 
-    let mut cache = TempFileCache::new(10 * BYTE);
+    let mut sctp_client = SctpStreamBuilder::new()
+        .socket()
+        .build();
 
-    for i in 0..9{
-        cache.insert(format!("mere{i}").to_string());
-        cache.write_append(&format!("mere{i}").to_string(),b"1").unwrap()
-    }
+    println!("{:?}",sctp_client);
+    let mut sctp_clone = sctp_client.try_clone();
+    println!("{:?}",sctp_clone)
 
-    println!("{cache:#?}");
-    cache.make_room(10);
-    println!("{cache:#?}");
 }

@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt,close};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
@@ -102,7 +102,17 @@ pub fn safe_close(socket_fd: i32) -> Result<i32>{
     wrap_result_nonnegative(result)
 }
 
-/// Function that extracts errno safely
+/// Wrapper function for dup.
+pub fn safe_dup(old_fd: i32) -> Result<i32>{
+    let result = unsafe{
+        dup(old_fd)
+    };
+
+    wrap_result_nonnegative(result)
+}
+
+
+/// Function that extracts errno safely.
 pub fn get_errno() -> i32{
 
     let mut errno = 0;

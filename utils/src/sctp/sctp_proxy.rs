@@ -1,11 +1,11 @@
-use std::{io, mem,thread};
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
+use std::{io,thread};
+use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
-use http::{Method, Request};
-use libc::mmap;
+use std::sync::mpsc::Sender;
+use std::thread::JoinHandle;
 use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
@@ -68,8 +68,9 @@ impl SctpProxy{
         Ok(())
     }
 
+
     /// Client handler method
-    fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream,cache: &mut TempFileCache){
+    fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream, cache: &mut TempFileCache){
 
         // used to RR over the streams
         let mut stream_number = 0u16;

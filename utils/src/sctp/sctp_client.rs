@@ -1,7 +1,7 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
-use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
+use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
 use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
 use io::Result;
 
@@ -187,6 +187,22 @@ impl SctpStream{
         }
 
         events
+    }
+
+    /// Tries to clone the current stream by creating a new file descriptor for the current socket.
+    pub fn try_clone(&self) -> Result<Self>{
+
+        let new_sock_fd = safe_dup(self.sock_fd)?;
+
+        Ok(Self{
+            sock_fd: new_sock_fd,
+            address: self.address.clone(),
+            peer_addresses: self.peer_addresses.clone(),
+            active_events: self.active_events.clone(),
+            ttl: self.ttl,
+
+        })
+
     }
 
 }
