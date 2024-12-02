@@ -1,11 +1,12 @@
 use std::{io,thread};
-use std::net::{Ipv4Addr, TcpListener, TcpStream};
+use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::io::{Read, Write};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::JoinHandle;
+use http::Uri;
 use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
@@ -66,6 +67,132 @@ impl SctpProxy{
         }
 
         Ok(())
+    }
+
+
+
+    fn tcp_reader_thread(mut tcp_reader_stream: TcpStream,
+                         temp_file_cache: &TempFileCache,
+                         tcp_writer_tx: Sender<Uri>,
+                         sctp_writer_tx: Sender<Uri>) -> JoinHandle<Result<()>>{
+
+        thread::spawn(move || {
+
+            let mut buffer = vec![0; BUFFER_SIZE];
+
+            loop{
+
+                match tcp_reader_stream.read(&mut buffer){
+
+                    Ok(0) => {
+                        println!("TCP reader thread ended");
+                        break;
+                    }
+
+                    Err(error) => return Err(error),
+
+                    Ok(bytes_read) => {
+
+                        // get the request from the buffer and extract the uri
+                        let http_request = string_to_http_request(&String::from_utf8_lossy(&buffer[..bytes_read]));
+                        let uri = http_request.uri().to_owned();
+
+                        // if the file is in the cache send a job to the tcp writer thread
+                        if temp_file_cache.contains_key(&uri.to_string()) {
+                            tcp_writer_tx.send(uri)?;
+                        }
+                        //if the file is not cached send the job to the sctp writer thread
+                        else{
+                            sctp_writer_tx.send(uri)?;
+                        }
+
+                    }
+
+                }
+            }
+            return Ok(())
+        })
+
+    }
+
+    pub fn tcp_writer_thread(mut tcp_writer_stream: TcpStream,tcp_writer_rx: Receiver<Uri>) -> JoinHandle<Result<()>>{
+
+        thread::spawn(move || {
+
+            while let Some(uri) = tcp_writer_rx.recv(){
+                // TODO aici le ia din cache si le trimite
+            }
+
+            Ok(())
+        })
+
+    }
+
+    pub fn sctp_reader_thread(sctp_reader_stream: SctpStream) -> JoinHandle<Result<()>>{
+
+        thread::spawn(move || {
+
+            let mut buffer = vec![0; BUFFER_SIZE];
+
+            loop{
+
+                //read the response
+                match sctp_reader_stream.read(&mut buffer,None,None) {
+                    Err(error) => return Err(error),
+
+                    // response received
+                    Ok(n) => {
+                        // TODO: aici stochezi in cache ce primesti prin download th pool
+                    }
+                }
+
+                loop{
+                    match sctp_reader_stream.read(&mut buffer,None,None) {
+                        Err(error) => return Err(error),
+
+                        Ok(1) => break,
+
+                        // response received
+                        Ok(n) => {
+                            // TODO: aici stochezi in cache ce primesti prin download th pool
+                        }
+                    }
+                }
+
+                // TODO prefetching
+
+            }
+
+
+            Ok(())
+        })
+
+    }
+
+    pub fn sctp_writer_thread(sctp_writer_stream: SctpStream,sctp_writer_rx: Receiver<Uri>) -> JoinHandle<Result<()>>{
+
+        thread::spawn(move || {
+
+            let mut stream_number = 0u16;
+            loop{
+
+                let uri = sctp_writer_rx.recv()?;
+                let mut uri = uri.to_string();
+
+                if uri == "/"{
+                    uri = "/index.html".to_string()
+                }
+
+                let http_request = http_request_to_string(basic_http_get_request(&uri));
+
+                sctp_writer_stream.write_all(http_request.as_bytes(),stream_number,0)?;
+                stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
+
+            }
+
+            Ok(())
+        })
+
     }
 
 

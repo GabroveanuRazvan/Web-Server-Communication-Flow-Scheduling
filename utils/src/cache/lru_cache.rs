@@ -6,6 +6,8 @@ use indexmap::IndexMap;
 use crate::cache::temp_file_manager::TempFileManager;
 use crate::mapped_file::MappedFile;
 use std::io::Result;
+use std::sync::Arc;
+
 static MANAGER_PATH: &str = "/tmp/tmpfs/cache";
 
 /// File cache that maps the path of the file to a rc<mmap> smart pointer
@@ -13,7 +15,7 @@ static MANAGER_PATH: &str = "/tmp/tmpfs/cache";
 pub struct TempFileCache {
     capacity: usize,
     size: usize,
-    ordered_map: IndexMap<String, Rc<RefCell<MappedFile>>>,
+    ordered_map: IndexMap<String, Arc<RefCell<MappedFile>>>,
     file_manager: TempFileManager,
 }
 
@@ -57,7 +59,7 @@ impl TempFileCache {
         };
 
         // finally insert the key and the mapped file
-        self.ordered_map.insert(key, Rc::new(RefCell::new(mapped_file)));
+        self.ordered_map.insert(key, Arc::new(RefCell::new(mapped_file)));
 
     }
 
@@ -140,29 +142,34 @@ impl TempFileCache {
     }
 
     /// Obtains the wrapped MappedFile from the cache if the cache is hit
-    pub fn get(&mut self,key: &str)-> Option<Rc<RefCell<MappedFile>>>{
+    pub fn get(&mut self,key: &str)-> Option<Arc<RefCell<MappedFile>>>{
 
         if let Some(value) = self.ordered_map.get(key){
 
             // get a copy of the value
-            let value_copy = Rc::clone(value);
+            let value_copy = Arc::clone(value);
             // remove the old entry; value goes out of scope
             self.ordered_map.shift_remove(key);
             // insert the got value
             self.ordered_map.insert(key.to_string(), value_copy);
 
-            return Some(Rc::clone(self.ordered_map.get(key).unwrap()));
+            return Some(Arc::clone(self.ordered_map.get(key).unwrap()));
 
         }
 
         None
     }
 
+    /// Checks if a specific key exists in the cache.
+    pub fn contains_key(&self,key: &str)-> bool{
+        self.ordered_map.contains_key(key)
+    }
+
     /// Obtains the wrapped MappedFile from the cache without changing cache state
-    pub fn peek(&mut self,key: &str) -> Option<Rc<RefCell<MappedFile>>>{
+    pub fn peek(&mut self,key: &str) -> Option<Arc<RefCell<MappedFile>>>{
 
         if let Some(_) = self.ordered_map.get(key){
-            return Some(Rc::clone(self.ordered_map.get(key).unwrap()));
+            return Some(Arc::clone(self.ordered_map.get(key).unwrap()));
         }
 
         None
