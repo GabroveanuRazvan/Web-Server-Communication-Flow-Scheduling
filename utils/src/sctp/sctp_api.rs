@@ -5,6 +5,7 @@ use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_
 use std::{ptr, slice};
 use std::io::{Result};
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::os::fd::RawFd;
 use crate::sctp::sctp_server::SctpServer;
 use super::super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
 
@@ -352,7 +353,7 @@ pub fn safe_sctp_peeloff(socket_fd: i32,assoc_id: i32 ) -> Result<i32>{
 }
 
 /// Creates an ipv4 sctp socket with delimited packets, returns Ok(socket_descriptor) or Err(io::Error) on failure
-pub fn safe_sctp_socket() -> Result<i32>{
+pub fn safe_sctp_socket() -> Result<RawFd>{
 
     let result = unsafe{
         socket(AF_INET,SOCK_STREAM,IPPROTO_SCTP)

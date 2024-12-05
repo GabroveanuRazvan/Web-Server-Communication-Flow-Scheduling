@@ -1,6 +1,7 @@
 use std::env::set_current_dir;
 use std::io::Result;
 use std::net::Ipv4Addr;
+use std::os::fd::RawFd;
 use std::path::Path;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS};
 use crate::pools::connection_scheduler::ConnectionScheduler;
@@ -156,7 +157,7 @@ impl<'a> Iterator for Incoming<'a>{
 
 /// Used to initialize the data of the sctp server
 pub struct SctpServerBuilder{
-    sock_fd: i32,
+    sock_fd: RawFd,
     addresses: Vec<Ipv4Addr>,
     port: u16,
     max_connections: u16,
@@ -191,7 +192,6 @@ impl SctpServerBuilder{
             active_events: self.active_events,
         }
     }
-
 
 }
 
