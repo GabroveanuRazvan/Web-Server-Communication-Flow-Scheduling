@@ -1,10 +1,11 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
+use std::os::fd::RawFd;
 
 /// Aliases and structures that are not in libc
 
@@ -17,7 +18,7 @@ extern "C"{
 }
 
 /// Wrapper for listen, returns Ok(0) or Err(io::Error) on failure
-pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32> {
+pub fn safe_listen(socket_fd: RawFd,max_queue_size: i32) -> Result<i32> {
 
     let result = unsafe{
         listen(socket_fd, max_queue_size)
@@ -28,7 +29,7 @@ pub fn safe_listen(socket_fd: i32,max_queue_size: i32) -> Result<i32> {
 }
 
 /// Wrapper for accept, returns Ok(0) or Err(io::Error) on failure
-pub fn safe_accept(socket_fd: i32, address: Option<&mut SockAddrIn>, address_size: Option<&mut usize>) -> Result<i32>{
+pub fn safe_accept(socket_fd: RawFd, address: Option<&mut SockAddrIn>, address_size: Option<&mut usize>) -> Result<i32>{
 
 
     let addr_ptr = get_ptr_from_mut_ref(address);
@@ -59,7 +60,7 @@ pub fn safe_inet_pton(ip: String, to: &mut u32) -> Result<i32>{
 }
 
 /// Wrapper function used to set the socket options
-pub fn safe_setsockopt(socket_fd: i32, level:i32, option_name:i32, option_value:&[u8]) -> Result<i32>{
+pub fn safe_setsockopt(socket_fd: RawFd, level:i32, option_name:i32, option_value:&[u8]) -> Result<i32>{
 
     let option_length = option_value.len() as u32;
 
@@ -72,7 +73,7 @@ pub fn safe_setsockopt(socket_fd: i32, level:i32, option_name:i32, option_value:
 }
 
 /// Wrapper function used to get the socket options
-pub fn safe_getsockopt(socket_fd: i32, level: i32, option_name: i32, option_value: &mut [u8]) -> Result<i32>{
+pub fn safe_getsockopt(socket_fd: RawFd, level: i32, option_name: i32, option_value: &mut [u8]) -> Result<i32>{
     let mut option_length = option_value.len() as u32;
 
     let result = unsafe{
@@ -83,7 +84,7 @@ pub fn safe_getsockopt(socket_fd: i32, level: i32, option_name: i32, option_valu
 }
 
 /// Wrapper function used for recv
-pub fn safe_recv(socket_fd: i32, msg: &mut [u8],message_size: usize,flags: i32) -> Result<i32>{
+pub fn safe_recv(socket_fd: RawFd, msg: &mut [u8],message_size: usize,flags: i32) -> Result<i32>{
 
     let result = unsafe{
         recv(socket_fd,msg.as_mut_ptr() as *mut c_void,message_size as size_t,flags) as i32
@@ -93,7 +94,7 @@ pub fn safe_recv(socket_fd: i32, msg: &mut [u8],message_size: usize,flags: i32) 
 }
 
 /// Wrapper function for close
-pub fn safe_close(socket_fd: i32) -> Result<i32>{
+pub fn safe_close(socket_fd: RawFd) -> Result<i32>{
 
     let result = unsafe{
         close(socket_fd)
@@ -103,9 +104,36 @@ pub fn safe_close(socket_fd: i32) -> Result<i32>{
 }
 
 /// Wrapper function for dup.
-pub fn safe_dup(old_fd: i32) -> Result<i32>{
+pub fn safe_dup(old_fd: RawFd) -> Result<RawFd>{
     let result = unsafe{
         dup(old_fd)
+    };
+
+    wrap_result_nonnegative(result)
+}
+
+/// Wrapper function for shm_open
+pub fn safe_shm_open(name: &str,oflag: i32,mode: u32) -> Result<RawFd>{
+
+    // convert the string into a string one (null terminated)
+    let name = CString::new(name)?;
+
+    let result = unsafe{
+        shm_open(name.as_ptr() as *const c_char,oflag,mode)
+    };
+
+    wrap_result_nonnegative(result)
+
+}
+
+/// Wrapper function for shm_unlink
+pub fn safe_shm_unlink(name: &str) -> Result<i32>{
+
+    // convert the string into a string one (null terminated)
+    let name = CString::new(name)?;
+
+    let result = unsafe{
+        shm_unlink(name.as_ptr() as *const c_char)
     };
 
     wrap_result_nonnegative(result)

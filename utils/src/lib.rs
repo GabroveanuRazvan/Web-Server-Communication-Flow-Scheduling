@@ -21,3 +21,4 @@ pub mod http_parsers;
 pub mod mapped_file;
 pub mod constants;
 pub mod tcp_proxy;
+mod shared_memory;
