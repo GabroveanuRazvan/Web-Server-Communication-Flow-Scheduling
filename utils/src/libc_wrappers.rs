@@ -272,3 +272,65 @@ pub fn debug_sctp_sndrcvinfo(info: &SctpSenderInfo) {
     println!("  Cumulative TSN: {}", info.sinfo_cumtsn);
     println!("  Association ID: {}\n", info.sinfo_assoc_id);
 }
+
+
+/// Builders
+
+pub struct ModeBuilder{
+    mode: u32,
+}
+
+impl ModeBuilder {
+    pub fn new() -> Self {
+        Self { mode: 0 }
+    }
+
+    pub fn user_read(mut self) -> Self {
+        self.mode |= libc::S_IRUSR;
+        self
+    }
+
+    pub fn user_write(mut self) -> Self {
+        self.mode |= libc::S_IWUSR;
+        self
+    }
+
+    pub fn user_execute(mut self) -> Self {
+        self.mode |= libc::S_IXUSR;
+        self
+    }
+
+    pub fn group_read(mut self) -> Self {
+        self.mode |= libc::S_IRGRP;
+        self
+    }
+
+    pub fn group_write(mut self) -> Self {
+        self.mode |= libc::S_IWGRP;
+        self
+    }
+
+    pub fn group_execute(mut self) -> Self {
+        self.mode |= libc::S_IXGRP;
+        self
+    }
+
+    pub fn others_read(mut self) -> Self {
+        self.mode |= libc::S_IROTH;
+        self
+    }
+
+    pub fn others_write(mut self) -> Self {
+        self.mode |= libc::S_IWOTH;
+        self
+    }
+
+    pub fn others_execute(mut self) -> Self {
+        self.mode |= libc::S_IXOTH;
+        self
+    }
+
+    pub fn build(self) -> libc::mode_t {
+        self.mode
+    }
+}
