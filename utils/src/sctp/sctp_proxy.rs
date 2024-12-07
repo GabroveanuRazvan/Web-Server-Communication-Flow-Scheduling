@@ -4,12 +4,14 @@ use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STRE
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use http::Uri;
+use memmap2::MmapMut;
 use crate::http_parsers::{basic_http_get_request, encode_path, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
@@ -22,6 +24,7 @@ const CHUNK_SIZE: usize = 64 * KILOBYTE;
 
 const DOWNLOAD_THREADS: usize = 6;
 const CACHE_PATH: &str = "/tmp/tmpfs";
+
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
@@ -45,7 +48,7 @@ impl SctpProxy{
         println!("Connect by: http://127.0.0.1:{}",self.port);
 
         // cache setup
-        let mut cache = TempFileCache::new(CACHE_CAPACITY);
+        // let mut cache = TempFileCache::new(CACHE_CAPACITY);
 
         for stream in tcp_server.incoming(){
 
@@ -78,11 +81,15 @@ impl SctpProxy{
         Ok(())
     }
 
+
+    /// Thread that received new requests and sends them to the server using the sctp stream.
+    /// Maps each request to a unique payload protocol id.
+    ///
     fn sender_thread(mut tcp_stream: TcpStream,sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
 
         println!("Tcp server waiting for GET requests;");
         let mut stream_number = 0u16;
-        let mut current_ppid = 1;
+        let mut current_ppid = 0;
         let mut browser_buffer: Vec<u8> = vec![0;4 * KILOBYTE];
 
         thread::spawn(move || {
@@ -105,6 +112,7 @@ impl SctpProxy{
 
                         println!("Got a tcp request!");
 
+                        // map each request to a payload protocol id
                         let mut ppid_map = ppid_map.write().expect("ppid map lock poisoned");
                         let path = String::from_utf8_lossy(&browser_buffer[..bytes_received]);
 
@@ -115,10 +123,20 @@ impl SctpProxy{
                             }
                         };
 
-                        ppid_map.insert(current_ppid,String::from(path));
+                        let path = String::from(path);
+                        let file_name = encode_path(&path);
 
+                        // create the file using the encoded file name
+                        let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+                        File::create(file_path)?;
+
+                        // map the current ppid to the file name
+                        ppid_map.insert(current_ppid,file_name);
+
+                        // send the request to the server
                         sctp_client.write_all(&browser_buffer[..bytes_received],stream_number,current_ppid,0)?;
 
+                        // round-robin over the streams
                         stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
                         current_ppid += 1;
 
@@ -133,21 +151,24 @@ impl SctpProxy{
 
     }
 
+
     pub fn receiver_thread(sctp_client: SctpStream,ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
 
         thread::spawn(move || {
 
-            let mut buffer = vec![0;BUFFER_SIZE];
+            // init a new thread pool that will download the files
             let mut sender_info = new_sctp_sndrinfo();
             let mut download_pool = ThreadPool::new(DOWNLOAD_THREADS);
 
             loop{
 
+                // create a new buffer for each request that will be owned by the thread pool
+                let mut buffer = vec![0;BUFFER_SIZE];
                 match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
                     Err(error) => return Err(From::from(error)),
 
-                    Ok(0) => {
+                    Ok(1) => {
                         //TODO file ended
                         println!("File was processed");
                         debug_sctp_sndrcvinfo(&sender_info);
@@ -157,20 +178,45 @@ impl SctpProxy{
 
                         debug_sctp_sndrcvinfo(&sender_info);
 
+                        // get the ppid and the ppid_map
                         let ppid = sender_info.sinfo_ppid as u32;
-                        let stream = sender_info.sinfo_stream as u16;
-                        let chunk = sender_info.sinfo_context as u32;
-
-                        let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
-                        let file_name = encode_path(ppid_map.get(&ppid).unwrap());
-
-                        let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
-
-                        println!("{file_path}");
-
+                        let ppid_map = Arc::clone(&ppid_map);
 
                         download_pool.execute(move || {
 
+                            // lock the RwLock and read the file name
+                            let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
+                            let file_name = encode_path(ppid_map.get(&ppid).unwrap());
+
+                            // get the actual file path
+                            let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+
+                            // retrieve the chunk index from the first 4 bytes of the payload
+                            let chunk_index = u32::from_be_bytes(buffer[..4].try_into().unwrap());
+
+                            // retrieve the first and last index of the chunk with respect to the first 4 bytes of the payload
+                            let chunk_begin = chunk_index as usize * (CHUNK_SIZE-4);
+                            let chunk_end = chunk_begin + bytes_read - 4;
+
+                            // open the already existing file
+                            let file = OpenOptions::new()
+                                .read(true)
+                                .write(true)
+                                .create(false)
+                                .open(&file_path)
+                                .unwrap();
+
+                            let file_size = file.metadata().unwrap().len();
+
+                            // resize the file if the size exceeds the current chunk_end size
+                            if chunk_end > file_size as usize {
+                                file.set_len(chunk_begin as u64 + bytes_read as u64).unwrap();
+                            }
+
+                            //map the file and write the chunk
+                            let mut mmap = unsafe{MmapMut::map_mut(&file).unwrap()};
+
+                            mmap[chunk_begin..chunk_end].copy_from_slice(&buffer[4..bytes_read]);
 
 
                         })
@@ -181,7 +227,6 @@ impl SctpProxy{
 
             }
 
-            thread::sleep(Duration::from_secs(5));
             Ok(())
         })
 

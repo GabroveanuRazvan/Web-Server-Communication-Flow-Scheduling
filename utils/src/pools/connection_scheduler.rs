@@ -5,6 +5,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use http::Uri;
+use crate::constants::BYTE;
 use crate::http_parsers::{basic_http_response, http_response_to_string, string_to_http_request};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::mapped_file::{MappedFile};
@@ -28,6 +29,7 @@ impl ConnectionScheduler{
     ///
     pub fn new(size: usize, stream: SctpStream,buffer_size: usize,chunk_size: usize)-> Self{
         assert!(size > 0);
+        assert!(chunk_size > 4 * BYTE);
 
         let mut workers = Vec::with_capacity(size);
         let stream = Arc::new(stream);
@@ -212,9 +214,14 @@ impl ConnectionWorker{
                     // send the body of the response chunk by chunk
 
                     let mut current_chunk: u32 = 0;
-                    for chunk in job.mmap_as_slice().chunks(chunk_size){
-                        println!("{current_chunk}");
-                        match stream.write_all(chunk,stream_number,ppid,current_chunk){
+
+                    // the chunk size is determined by chunk_size - 4 as the chunk number will be attached to the payload
+                    for chunk in job.mmap_as_slice().chunks(chunk_size - 4){
+
+                        let chunk: Vec<u8> = current_chunk.to_be_bytes().iter().chain(chunk.iter()).copied().collect();
+
+                        // send the chunk
+                        match stream.write_all(chunk.as_slice(),stream_number,ppid,current_chunk){
                             Ok(_bytes) => (),
                             Err(e) => println!("Write Error: {:?}",e)
                         }

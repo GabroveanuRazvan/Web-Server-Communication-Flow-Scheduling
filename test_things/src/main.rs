@@ -1,19 +1,20 @@
 use inotify::{EventMask, Inotify, WatchMask};
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{Ipv4Addr, TcpStream};
+use std::path::Path;
+use std::thread;
+use std::time::Duration;
+use utils::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo};
+use utils::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder};
+use utils::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
+use utils::sctp::sctp_server::SctpServerBuilder;
 
-fn encode_path(path: &str) -> String {
-    path.replace("/", "__")
-}
+fn main() {
 
-fn decode_path(encoded: &str) -> String {
-    encoded.replace("__", "/")
-}
+    let addr = "127.0.0.1:7878";
 
-fn main(){
+    let mut stream = TcpStream::connect(addr).unwrap();
 
-    let mut stream = TcpStream::connect("127.0.0.1:7878").unwrap();
-
-    stream.write_all("/images_4k/4k1.jpg".as_bytes()).unwrap();
+    stream.write_all("/images_4k/4k4.jpg".as_ref()).unwrap();
 
 }
