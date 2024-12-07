@@ -288,15 +288,15 @@ pub fn safe_sctp_sendmsg(
                          0,
                          ptr::null() as *const sockaddr_in,
                          0,
-                         0,
-                         0,
+                         payload_protocol_id,
+                         flags,
                          stream_number,
-                         0,
-                         0
+                         time_to_live,
+                         context
             )
         }
 
-        msg_size => unsafe{
+        _msg_size => unsafe{
             sctp_sendmsg(sock_fd,
                          msg.as_ptr() as *const c_void,
                          message_size,

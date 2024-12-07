@@ -4,6 +4,7 @@ use std::fs::OpenOptions;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
+use http::Uri;
 use crate::http_parsers::{basic_http_response, http_response_to_string, string_to_http_request};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::mapped_file::{MappedFile};
@@ -13,7 +14,7 @@ use crate::sctp::sctp_client::SctpStream;
 ///
 pub struct ConnectionScheduler{
 
-    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<MappedFile>>>>,Condvar)>,
+    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>,
     stream: Arc<SctpStream>,
     workers: Vec<ConnectionWorker>,
     chunk_size: usize,
@@ -47,7 +48,7 @@ impl ConnectionScheduler{
     }
 
     /// Pushes on the scheduler min-heap a new MappedFile as a job.
-    pub fn schedule_job(&self,job: MappedFile){
+    pub fn schedule_job(&self,job: (MappedFile,u32)){
         // get a reference to the heap and condition variable
         let (mutex,cvar) = &*self.heap;
 
@@ -74,6 +75,7 @@ impl ConnectionScheduler{
         loop {
 
             let bytes_read = self.stream.read(&mut buffer, Some(&mut sender_info), None).unwrap();
+            let ppid = sender_info.sinfo_ppid as u32;
 
             if bytes_read == 0 {
                 break;
@@ -81,23 +83,14 @@ impl ConnectionScheduler{
 
             debug_sctp_sndrcvinfo(&sender_info);
 
-            let request = string_to_http_request(&String::from_utf8(buffer.clone()).unwrap());
+            let path_request = String::from_utf8_lossy(&buffer[..bytes_read]);
 
-            println!("Request received: {} {}", request.method().to_string(), request.uri().to_string());
-
-            let mut method = request.method().to_string();
-            let mut path = request.uri().path().to_string();
-
-            if method == "GET" {
-                path = match path.as_str() {
-                    "/" => "./index.html".to_string(),
-                    _ => {
-                        String::from(".") + &path
-                    }
+            let path = match path_request.trim() {
+                "/" => "./index.html".to_string(),
+                _ => {
+                    String::from(".") + &path_request
                 }
-            } else {
-                path = "./404.html".to_string();
-            }
+            };
 
             let file = OpenOptions::new()
                 .read(true)
@@ -117,7 +110,7 @@ impl ConnectionScheduler{
 
             let mapped_file = MappedFile::new(file).unwrap();
 
-            self.schedule_job(mapped_file);
+            self.schedule_job((mapped_file,ppid));
 
         }
     }
@@ -164,12 +157,13 @@ pub struct ConnectionWorker{
 impl ConnectionWorker{
     /// Starts the worker thread.
     ///
-    pub fn new(label: usize,heap: Arc<(Mutex<Option<BinaryHeap<Reverse<MappedFile>>>>,Condvar)>, stream: Arc<SctpStream>,chunk_size: usize) -> Self{
+    pub fn new(label: usize,heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>, stream: Arc<SctpStream>,chunk_size: usize) -> Self{
 
         let thread = thread::spawn(move||{
 
             // get a reference to the mutex and cond var
             let (mutex,cvar) = &*heap;
+            let stream_number = label as u16;
 
             loop{
 
@@ -202,26 +196,33 @@ impl ConnectionWorker{
                 // when the heap is not empty extract the job release the mutex and execute the job
 
                 println!("Worker thread labeled {label} got a new job.");
-                if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
+                if let Some(Reverse(job_pair)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                     drop(heap_guard);
 
-                    // create the response and send it
-                    let mut response_bytes = http_response_to_string(basic_http_response(job.file_size())).into_bytes();
-                    let stream_number = label as u16;
+                    let (job,ppid) = job_pair;
 
-                    match stream.write_all(&mut response_bytes,stream_number,0){
-                        Ok(_bytes) => (),
-                        Err(e) => println!("Write Error: {:?}",e)
-                    }
+                    // // create the response and send it
+                    // let mut response_bytes = http_response_to_string(basic_http_response(job.file_size())).into_bytes();
+                    //
+                    // match stream.write_all(&mut response_bytes,stream_number,ppid,0){
+                    //     Ok(_bytes) => (),
+                    //     Err(e) => println!("Write Error: {:?}",e)
+                    // }
 
-                    // send the body of the response
-                    match stream.write_chunked(&job.mmap_as_slice(),chunk_size,stream_number,0){
-                        Ok(_bytes) => (),
-                        Err(e) => println!("Write Error: {:?}",e)
+                    // send the body of the response chunk by chunk
+
+                    let mut current_chunk: u32 = 0;
+                    for chunk in job.mmap_as_slice().chunks(chunk_size){
+                        println!("{current_chunk}");
+                        match stream.write_all(chunk,stream_number,ppid,current_chunk){
+                            Ok(_bytes) => (),
+                            Err(e) => println!("Write Error: {:?}",e)
+                        }
+                        current_chunk += 1;
                     }
 
                     // send a null character to mark the end of the message
-                    match stream.write_null(stream_number,0){
+                    match stream.write_null(stream_number,ppid,0){
                         Ok(_bytes) => (),
                         Err(e) => println!("Write Error: {:?}",e)
                     }

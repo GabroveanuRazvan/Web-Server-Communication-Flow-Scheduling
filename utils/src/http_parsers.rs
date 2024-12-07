@@ -195,3 +195,13 @@ pub fn extracts_http_paths(html_content: &str) -> Vec<String> {
 
     paths
 }
+
+/// Encodes a path by replacing "/" with "__".
+pub fn encode_path(path: &str) -> String {
+    path.replace("/", "__")
+}
+
+/// Decodes a path by replacing "__" with "/".
+pub fn decode_path(encoded: &str) -> String {
+    encoded.replace("__", "/")
+}

@@ -1,28 +1,19 @@
-use std::fs::File;
+use inotify::{EventMask, Inotify, WatchMask};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::os::fd::FromRawFd;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-use libc::{O_CREAT, O_EXCL, O_RDWR};
-use utils::constants::KILOBYTE;
-use utils::libc_wrappers::{safe_shm_open, safe_shm_unlink, ModeBuilder};
-use utils::shared_memory::SharedMemory;
+use std::net::TcpStream;
 
-fn main() -> std::io::Result<()> {
+fn encode_path(path: &str) -> String {
+    path.replace("/", "__")
+}
 
-    let mode = ModeBuilder::new()
-        .user_execute()
-        .user_read()
-        .user_write()
-        .build();
+fn decode_path(encoded: &str) -> String {
+    encoded.replace("__", "/")
+}
 
-    let mut shm = SharedMemory::recreate("me2re",mode,1 * KILOBYTE)?;
+fn main(){
 
-    println!("{shm:?}");
+    let mut stream = TcpStream::connect("127.0.0.1:7878").unwrap();
 
+    stream.write_all("/images_4k/4k1.jpg".as_bytes()).unwrap();
 
-    thread::sleep(Duration::from_secs(15));
-    Ok(())
 }

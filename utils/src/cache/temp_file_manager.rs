@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fs::{create_dir, remove_dir_all, remove_file, File, OpenOptions};
+use std::fs::{create_dir_all, remove_dir_all, remove_file, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use chrono::Utc;
@@ -17,7 +17,7 @@ impl TempFileManager {
     /// Creates a new directory from the given path
     pub fn new(dir_path: &Path) -> Self {
 
-        if let Err(error) = create_dir(dir_path){
+        if let Err(error) = create_dir_all(dir_path){
             panic!("Error creating temp directory: {}",error)
         }
 

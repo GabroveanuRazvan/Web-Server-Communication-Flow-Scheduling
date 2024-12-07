@@ -3,18 +3,25 @@ use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
+use std::time::Duration;
 use http::Uri;
-use crate::http_parsers::{basic_http_get_request, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
+use crate::http_parsers::{basic_http_get_request, encode_path, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
 use crate::constants::{KILOBYTE, MEGABYTE};
+use crate::pools::thread_pool::ThreadPool;
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
 const CACHE_CAPACITY: usize = 100 * MEGABYTE;
 const CHUNK_SIZE: usize = 64 * KILOBYTE;
+
+const DOWNLOAD_THREADS: usize = 6;
+const CACHE_PATH: &str = "/tmp/tmpfs";
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
@@ -60,16 +67,136 @@ impl SctpProxy{
             sctp_client.connect();
             sctp_client.options();
 
+            let sctp_client_clone = sctp_client.try_clone()?;
 
-            Self::handle_client(stream,sctp_client,&mut cache)
+            // Self::handle_client(stream,sctp_client_clone,&mut cache);
 
+            Self::handle_client2(stream, sctp_client_clone);
 
         }
 
         Ok(())
     }
 
+    fn sender_thread(mut tcp_stream: TcpStream,sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
 
+        println!("Tcp server waiting for GET requests;");
+        let mut stream_number = 0u16;
+        let mut current_ppid = 1;
+        let mut browser_buffer: Vec<u8> = vec![0;4 * KILOBYTE];
+
+        thread::spawn(move || {
+
+            loop{
+
+                //receive a request
+                match tcp_stream.read(&mut browser_buffer){
+                    Ok(0) => {
+                        println!("Connection ended");
+                        break;
+                    }
+
+                    Err(error) => {
+                        panic!("Tcp Client error: {}", error);
+                    }
+
+                    // send the request to be processed by the server
+                    Ok(bytes_received) => {
+
+                        println!("Got a tcp request!");
+
+                        let mut ppid_map = ppid_map.write().expect("ppid map lock poisoned");
+                        let path = String::from_utf8_lossy(&browser_buffer[..bytes_received]);
+
+                        let path = match path.trim() {
+                            "/" => "/index.html".to_string(),
+                            _ => {
+                                path.to_string()
+                            }
+                        };
+
+                        ppid_map.insert(current_ppid,String::from(path));
+
+                        sctp_client.write_all(&browser_buffer[..bytes_received],stream_number,current_ppid,0)?;
+
+                        stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
+                        current_ppid += 1;
+
+                    }
+                }
+
+            }
+
+            Ok(())
+
+        })
+
+    }
+
+    pub fn receiver_thread(sctp_client: SctpStream,ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
+
+        thread::spawn(move || {
+
+            let mut buffer = vec![0;BUFFER_SIZE];
+            let mut sender_info = new_sctp_sndrinfo();
+            let mut download_pool = ThreadPool::new(DOWNLOAD_THREADS);
+
+            loop{
+
+                match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+
+                    Err(error) => return Err(From::from(error)),
+
+                    Ok(0) => {
+                        //TODO file ended
+                        println!("File was processed");
+                        debug_sctp_sndrcvinfo(&sender_info);
+                    }
+
+                    Ok(bytes_read) => {
+
+                        debug_sctp_sndrcvinfo(&sender_info);
+
+                        let ppid = sender_info.sinfo_ppid as u32;
+                        let stream = sender_info.sinfo_stream as u16;
+                        let chunk = sender_info.sinfo_context as u32;
+
+                        let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
+                        let file_name = encode_path(ppid_map.get(&ppid).unwrap());
+
+                        let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+
+                        println!("{file_path}");
+
+
+                        download_pool.execute(move || {
+
+
+
+                        })
+
+                    }
+
+                }
+
+            }
+
+            thread::sleep(Duration::from_secs(5));
+            Ok(())
+        })
+
+    }
+
+    fn handle_client2(mut tcp_stream: TcpStream, sctp_client: SctpStream){
+
+        let ppid_map: Arc<RwLock<HashMap<u32,String>>> =  Arc::new(RwLock::new(HashMap::new()));
+
+        let sctp_reader_client = sctp_client.try_clone().expect("Sctp client cloning error");
+
+        Self::sender_thread(tcp_stream,sctp_client,Arc::clone(&ppid_map));
+        Self::receiver_thread(sctp_reader_client,Arc::clone(&ppid_map));
+
+    }
     /// Client handler method
     fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream, cache: &mut TempFileCache){
 
@@ -78,7 +205,7 @@ impl SctpProxy{
 
         println!("New client");
 
-        let mut buffer: Vec<u8> = vec![0;BUFFER_SIZE];
+        let mut browser_buffer: Vec<u8> = vec![0;BUFFER_SIZE];
 
         loop{
 
@@ -87,7 +214,7 @@ impl SctpProxy{
             //TODO main thread de read de la browser
 
             // the tcp stream waits for a request
-            match tcp_stream.read(&mut buffer){
+            match tcp_stream.read(&mut browser_buffer){
 
                 Ok(0) => {
                     println!("Tcp client closed");
@@ -100,7 +227,7 @@ impl SctpProxy{
 
                 // request received
                 Ok(n) => {
-                    let received_message = String::from_utf8_lossy(&buffer[..n]);
+                    let received_message = String::from_utf8_lossy(&browser_buffer[..n]);
 
                     // get the uri
                     let mut uri = string_to_http_request(received_message.as_ref())
@@ -136,7 +263,7 @@ impl SctpProxy{
                     // TODO aici vine un thread care trimite cererile (nu in interiorul threadului principal)
 
                     // send the request
-                    sctp_client.write(&mut buffer[..],n,stream_number,0).expect("Sctp Client write error");
+                    sctp_client.write_all(uri.as_bytes(),stream_number,0,0).expect("Sctp Client write error");
 
                     // simple RR over the streams
                     stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
@@ -145,8 +272,10 @@ impl SctpProxy{
 
                     // TODO aici vine threadul de receptie care o sa faca in loop read cu select
 
+
+
                     //read the response
-                    match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                    match sctp_client.read(&mut browser_buffer,Some(&mut sender_info),None){
 
                         Err(error)=>{
                             panic!("Sctp read error: {}", error);
@@ -156,10 +285,10 @@ impl SctpProxy{
                         Ok(n) =>{
 
                             // write the response header into the cache
-                            cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
+                            cache.write_append(&uri,&browser_buffer[..n]).expect("Temporary file write error");
 
                             // write into tcp stream
-                            if let Err(error) = tcp_stream.write(&buffer[..n]){
+                            if let Err(error) = tcp_stream.write(&browser_buffer[..n]){
                                 panic!("Tcp write error: {}", error);
                             }
 
@@ -171,7 +300,7 @@ impl SctpProxy{
                     // now loop to receive the chunked response body
                     loop{
                         // the sctp-stream waits to get a response
-                        match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                        match sctp_client.read(&mut browser_buffer,Some(&mut sender_info),None){
                             // end message received
                             Ok(1) => {
                                 println!("Sctp client ended processing");
@@ -186,10 +315,10 @@ impl SctpProxy{
                             Ok(n) =>{
 
                                 // write to temporary file
-                                cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
+                                cache.write_append(&uri,&browser_buffer[..n]).expect("Temporary file write error");
 
                                 // write to tcp stream
-                               tcp_stream.write(&buffer[..n]).expect("Tcp stream write error");
+                               tcp_stream.write(&browser_buffer[..n]).expect("Tcp stream write error");
 
                                 println!("Received on stream {}",sender_info.sinfo_stream)
                             }
@@ -220,16 +349,13 @@ impl SctpProxy{
                             // insert the new value into the cache
                             cache.insert(uri.clone());
 
-
-                            // get a string request and send it to the server
-                            let request = http_request_to_string(basic_http_get_request(&uri));
-
-                            sctp_client.write_all(request.as_bytes(),stream_number,0).expect("Sctp Client prefetch write error");
+                            // send the path to the server
+                            sctp_client.write_all(uri.as_bytes(),stream_number,0,0).expect("Sctp Client prefetch write error");
 
                             // RR over the streams
                             stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
                             //read the response body
-                            match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                            match sctp_client.read(&mut browser_buffer,Some(&mut sender_info),None){
 
                                 Err(error)=>{
                                     panic!("Sctp read error: {}", error);
@@ -238,12 +364,12 @@ impl SctpProxy{
                                 // response received
                                 Ok(n) =>{
 
-                                    let response = string_to_http_response(String::from_utf8_lossy(&buffer[..n]).as_ref());
+                                    let response = string_to_http_response(String::from_utf8_lossy(&browser_buffer[..n]).as_ref());
                                     let content_length = response.headers().get("Content-Length").unwrap().to_str().unwrap().parse::<u64>().unwrap();
                                     println!("Received SCTP response length {content_length} from {uri}");
 
                                     // write to temporary file
-                                    cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
+                                    cache.write_append(&uri,&browser_buffer[..n]).expect("Temporary file write error");
 
                                 }
                             }
@@ -251,7 +377,7 @@ impl SctpProxy{
                             // now loop to receive the chunked response body
                             loop{
                                 // the sctp-stream waits to get a response
-                                match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                                match sctp_client.read(&mut browser_buffer,Some(&mut sender_info),None){
                                     // end message received
                                     Ok(1) => {
                                         println!("Sctp client ended processing prefetch");
@@ -266,7 +392,7 @@ impl SctpProxy{
                                     Ok(n) =>{
 
                                         // write to temporary file
-                                        cache.write_append(&uri,&buffer[..n]).expect("Temporary file write error");
+                                        cache.write_append(&uri,&browser_buffer[..n]).expect("Temporary file write error");
                                         println!("Received on stream {}",sender_info.sinfo_stream)
 
                                     }

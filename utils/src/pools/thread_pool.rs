@@ -86,12 +86,12 @@ impl Worker {
 
                 match message{
                     Ok(job) => {
-                        println!("Worked labeled with {label} got a job.");
+                        println!("Worker labeled with {label} got a job.");
                         job()
                     }
 
                     Err(_) => {
-                        println!("Worked labeled with {label} disconnected.");
+                        println!("Worker labeled with {label} disconnected.");
                         break;
                     }
 
