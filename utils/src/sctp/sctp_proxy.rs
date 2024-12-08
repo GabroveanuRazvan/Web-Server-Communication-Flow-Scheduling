@@ -1,4 +1,4 @@
-use std::{io,thread};
+use std::{fs, io, thread};
 use std::net::{Ipv4Addr, Shutdown, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
@@ -26,6 +26,7 @@ const CHUNK_SIZE: usize = 64 * KILOBYTE;
 
 const DOWNLOAD_THREADS: usize = 6;
 const CACHE_PATH: &str = "/tmp/tmpfs";
+const DOWNLOAD_SUFFIX: &str = ".tmp";
 
 
 /// Abstraction for a tcp to sctp proxy
@@ -97,7 +98,7 @@ impl SctpProxy{
 
     /// Tcp receiver thread that reads incoming request and sends them to be forwarded by the sctp sender thread.
     ///
-    fn receiver_tcp_thread(mut tcp_stream: TcpStream, sctp_tx: Sender<Vec<u8>>) -> JoinHandle<Result<()>>{
+    fn receiver_tcp_thread(tcp_stream: TcpStream, sctp_tx: Sender<Vec<u8>>) -> JoinHandle<Result<()>>{
 
         println!("Got new tcp client! Tcp receiver thread started.");
 
@@ -117,7 +118,7 @@ impl SctpProxy{
 
             }
 
-            println!("Connection closed!");
+            println!("Tcp connection closed!");
             Ok(())
 
         })
@@ -151,7 +152,7 @@ impl SctpProxy{
                 let file_name = encode_path(&path);
 
                 // create the file using the encoded file name
-                let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+                let file_path = format!("{}/{}{}", CACHE_PATH, file_name, DOWNLOAD_SUFFIX);
                 let file_path = Path::new(&file_path);
 
                 // check if the current file already exists, might be useful in a multithreaded context
@@ -200,29 +201,34 @@ impl SctpProxy{
 
                 // create a new buffer for each request that will be owned by the thread pool
                 let mut buffer = vec![0;BUFFER_SIZE];
+                let ppid_map = Arc::clone(&ppid_map);
                 match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
                     Err(error) => return Err(From::from(error)),
 
                     Ok(1) => {
-                        //TODO file ended
                         println!("File was processed");
+
+                        // get the ppid
+                        let ppid = sender_info.sinfo_ppid as u32;
+
+                        let file_path = Self::get_file_path(Arc::clone(&ppid_map), ppid);
+
+                        let new_file_path = file_path.clone();
+                        let new_file_path = new_file_path.strip_suffix(DOWNLOAD_SUFFIX).unwrap();
+
+                        // rename the file to mark it as completed
+                        fs::rename(file_path, new_file_path)?;
                     }
 
                     Ok(bytes_read) => {
-
-                        // get the ppid and the ppid_map
+                        println!("{bytes_read:?}");
+                        // get the ppid
                         let ppid = sender_info.sinfo_ppid as u32;
-                        let ppid_map = Arc::clone(&ppid_map);
 
                         download_pool.execute(move || {
 
-                            // lock the RwLock and read the file name
-                            let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
-                            let file_name = encode_path(ppid_map.get(&ppid).unwrap());
-
-                            // get the actual file path
-                            let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+                            let file_path = Self::get_file_path(Arc::clone(&ppid_map), ppid);
 
                             // retrieve the chunk index from the first 4 bytes of the payload
                             let chunk_index = u32::from_be_bytes(buffer[..4].try_into().unwrap());
@@ -265,6 +271,19 @@ impl SctpProxy{
 
     }
 
+    /// Based on a payload protocol id, retrieves the file request and formats it into a path to be stored.
+    ///
+    fn get_file_path(ppid_map: Arc<RwLock<HashMap<u32,String>>>,ppid: u32) -> String{
+
+        // lock the RwLock and read the file name
+        let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
+        let file_name = encode_path(ppid_map.get(&ppid).unwrap());
+
+        // get the actual file path
+        let file_path = format!("{}/{}{}", CACHE_PATH, file_name, DOWNLOAD_SUFFIX);
+
+        file_path
+    }
 
     /// Client handler method
     fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream, cache: &mut TempFileCache){
