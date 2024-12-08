@@ -86,7 +86,7 @@ impl Worker {
 
                 match message{
                     Ok(job) => {
-                        println!("Worker labeled with {label} got a job.");
+                        // println!("Worker labeled with {label} got a job.");
                         job()
                     }
 

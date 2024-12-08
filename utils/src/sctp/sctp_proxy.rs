@@ -4,10 +4,12 @@ use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STRE
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
+use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, RwLock};
+use std::sync::{mpsc, Arc, RwLock};
+use std::sync::atomic::AtomicU32;
 use std::thread::JoinHandle;
 use std::time::Duration;
 use http::Uri;
@@ -48,111 +50,145 @@ impl SctpProxy{
         println!("Connect by: http://127.0.0.1:{}",self.port);
 
         // cache setup
-        // let mut cache = TempFileCache::new(CACHE_CAPACITY);
+        create_dir_all(CACHE_PATH)?;
 
+        // sctp client setup
+        let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
+
+        let mut sctp_client = SctpStreamBuilder::new()
+            .socket()
+            .port(self.port)
+            .address(self.sctp_address)
+            .addresses(self.sctp_peer_addresses.clone())
+            .ttl(0)
+            .events(events)
+            .build();
+
+        sctp_client.connect();
+        sctp_client.options();
+
+
+        //ppid map setup
+        let ppid_map: Arc<RwLock<HashMap<u32,String>>> =  Arc::new(RwLock::new(HashMap::new()));
+
+        // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
+        let (sctp_tx,sctp_rx) = mpsc::channel();
+
+        let sender_sctp_stream = sctp_client.try_clone()?;
+        let receiver_sctp_stream = sctp_client.try_clone()?;
+
+        // run the sctp client threads
+        Self::sender_sctp_thread(sender_sctp_stream,Arc::clone(&ppid_map),sctp_rx);
+        Self::receiver_sctp_thread(receiver_sctp_stream,Arc::clone(&ppid_map));
+
+        // for each tcp client init a tcp receiver thread
         for stream in tcp_server.incoming(){
 
             let stream = stream?;
 
-            // create a new sctp client
+            let sctp_tx_clone = sctp_tx.clone();
 
-            let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
-
-            let mut sctp_client = SctpStreamBuilder::new()
-                .socket()
-                .port(self.port)
-                .address(self.sctp_address)
-                .addresses(self.sctp_peer_addresses.clone())
-                .ttl(0)
-                .events(events)
-                .build();
-
-            sctp_client.connect();
-            sctp_client.options();
-
-            let sctp_client_clone = sctp_client.try_clone()?;
-
-            // Self::handle_client(stream,sctp_client_clone,&mut cache);
-
-            Self::handle_client2(stream, sctp_client_clone);
+            Self::receiver_tcp_thread(stream,sctp_tx_clone);
 
         }
 
         Ok(())
     }
 
-
-    /// Thread that received new requests and sends them to the server using the sctp stream.
-    /// Maps each request to a unique payload protocol id.
+    /// Tcp receiver thread that reads incoming request and sends them to be forwarded by the sctp sender thread.
     ///
-    fn sender_thread(mut tcp_stream: TcpStream,sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
+    fn receiver_tcp_thread(mut tcp_stream: TcpStream, sctp_tx: Sender<Vec<u8>>) -> JoinHandle<Result<()>>{
 
-        println!("Tcp server waiting for GET requests;");
-        let mut stream_number = 0u16;
-        let mut current_ppid = 0;
-        let mut browser_buffer: Vec<u8> = vec![0;4 * KILOBYTE];
+        println!("Got new tcp client! Tcp receiver thread started.");
+
+        let reader = BufReader::new(tcp_stream);
 
         thread::spawn(move || {
 
-            loop{
+            for line in reader.lines(){
 
-                //receive a request
-                match tcp_stream.read(&mut browser_buffer){
-                    Ok(0) => {
-                        println!("Connection ended");
-                        break;
-                    }
+                let request = line?;
 
-                    Err(error) => {
-                        panic!("Tcp Client error: {}", error);
-                    }
+                println!("Got a tcp request!");
 
-                    // send the request to be processed by the server
-                    Ok(bytes_received) => {
-
-                        println!("Got a tcp request!");
-
-                        // map each request to a payload protocol id
-                        let mut ppid_map = ppid_map.write().expect("ppid map lock poisoned");
-                        let path = String::from_utf8_lossy(&browser_buffer[..bytes_received]);
-
-                        let path = match path.trim() {
-                            "/" => "/index.html".to_string(),
-                            _ => {
-                                path.to_string()
-                            }
-                        };
-
-                        let path = String::from(path);
-                        let file_name = encode_path(&path);
-
-                        // create the file using the encoded file name
-                        let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
-                        File::create(file_path)?;
-
-                        // map the current ppid to the file name
-                        ppid_map.insert(current_ppid,file_name);
-
-                        // send the request to the server
-                        sctp_client.write_all(&browser_buffer[..bytes_received],stream_number,current_ppid,0)?;
-
-                        // round-robin over the streams
-                        stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
-                        current_ppid += 1;
-
-                    }
-                }
+                sctp_tx.send(request.as_bytes().to_vec()).map_err(
+                    |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
+                )?;
 
             }
 
+            println!("Connection closed!");
             Ok(())
 
         })
 
     }
 
+    /// Sctp thread that sends incoming requests to the server to be processed.
+    /// Each request is mapped to a unique ppid value.
+    ///
+    pub fn sender_sctp_thread(sctp_client: SctpStream,ppid_map: Arc<RwLock<HashMap<u32,String>>>,rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
 
-    pub fn receiver_thread(sctp_client: SctpStream,ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
+        println!("Sctp sender thread started!");
+
+        thread::spawn(move || {
+
+            let mut stream_number = 0u16;
+            let mut current_ppid = 0;
+
+            for request_buffer in rx{
+
+                let path = String::from_utf8_lossy(&request_buffer);
+
+                let path = match path.trim() {
+                    "/" => "/index.html".to_string(),
+                    _ => {
+                        path.to_string()
+                    }
+                };
+
+                let path = String::from(path);
+                let file_name = encode_path(&path);
+
+                // create the file using the encoded file name
+                let file_path = CACHE_PATH.to_string() + "/" + file_name.as_str();
+                let file_path = Path::new(&file_path);
+
+                // check if the current file already exists, might be useful in a multithreaded context
+                if file_path.exists(){
+                    continue;
+                }
+
+                File::create(file_path)?;
+
+                // map each request to a payload protocol id
+                let mut ppid_map = ppid_map.write().expect("ppid map lock poisoned");
+                // map the current ppid to the file name
+                ppid_map.insert(current_ppid,file_name);
+
+                // send the request to the server
+                sctp_client.write_all(&request_buffer,stream_number,current_ppid,0)?;
+
+                // round-robin over the streams
+                stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
+                current_ppid += 1;
+
+
+            }
+
+            Ok(())
+        })
+
+    }
+
+    /// Sctp thread that reads the incoming messages of the server.
+    /// The server sends chunked files that need downloading.
+    /// Each file is identified through a unique ppid value.
+    /// After the message is received it is sent to a download thread pool to be processed.
+    ///
+    pub fn receiver_sctp_thread(sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
+
+        println!("Sctp receiver thread started!");
 
         thread::spawn(move || {
 
@@ -171,12 +207,9 @@ impl SctpProxy{
                     Ok(1) => {
                         //TODO file ended
                         println!("File was processed");
-                        debug_sctp_sndrcvinfo(&sender_info);
                     }
 
                     Ok(bytes_read) => {
-
-                        debug_sctp_sndrcvinfo(&sender_info);
 
                         // get the ppid and the ppid_map
                         let ppid = sender_info.sinfo_ppid as u32;
@@ -210,7 +243,7 @@ impl SctpProxy{
 
                             // resize the file if the size exceeds the current chunk_end size
                             if chunk_end > file_size as usize {
-                                file.set_len(chunk_begin as u64 + bytes_read as u64).unwrap();
+                                file.set_len(chunk_begin as u64 + (bytes_read-4) as u64).unwrap();
                             }
 
                             //map the file and write the chunk
@@ -232,16 +265,7 @@ impl SctpProxy{
 
     }
 
-    fn handle_client2(mut tcp_stream: TcpStream, sctp_client: SctpStream){
 
-        let ppid_map: Arc<RwLock<HashMap<u32,String>>> =  Arc::new(RwLock::new(HashMap::new()));
-
-        let sctp_reader_client = sctp_client.try_clone().expect("Sctp client cloning error");
-
-        Self::sender_thread(tcp_stream,sctp_client,Arc::clone(&ppid_map));
-        Self::receiver_thread(sctp_reader_client,Arc::clone(&ppid_map));
-
-    }
     /// Client handler method
     fn handle_client(mut tcp_stream: TcpStream, sctp_client: SctpStream, cache: &mut TempFileCache){
 

@@ -1,7 +1,10 @@
 def compare_files(file1_path, file2_path):
+    import os
     try:
         with open(file1_path, 'rb') as file1, open(file2_path, 'rb') as file2:
             position = 0
+            print(os.path.getsize(file1_path))
+            print(os.path.getsize(file2_path))
             while True:
                 char1 = file1.read(1)
                 char2 = file2.read(1)
