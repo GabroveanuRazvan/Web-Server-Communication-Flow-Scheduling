@@ -1,9 +1,12 @@
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use std::io::{Read, Result};
+use std::io::{BufRead, BufReader, Read, Result};
+use std::path::Path;
 use crate::constants::KILOBYTE;
+use crate::http_parsers::encode_path;
 
 const BUFFER_SIZE: usize = 4 * KILOBYTE;
 
+const CACHE_PATH: &str = "/tmp/tmpfs";
 #[derive(Debug)]
 pub struct TcpProxy{
     port: u16,
@@ -23,24 +26,86 @@ impl TcpProxy{
         for mut stream in browser_server.incoming(){
 
             let stream = stream?;
+            let proxy_stream = TcpStream::connect(self.sctp_proxy_address)?;
 
-            Self::handle_client(stream)?
+            Self::handle_client(stream,proxy_stream)?
 
         }
 
         Ok(())
     }
 
-    pub fn handle_client(mut stream: TcpStream) -> Result<()>{
+    pub fn handle_client(stream: TcpStream,proxy_stream: TcpStream) -> Result<()>{
 
-        let mut buffer: Vec<u8> = vec![0;BUFFER_SIZE];
+        let mut reader = BufReader::new(stream);
 
-        let bytes_read = stream.read(&mut buffer)?;
+        loop{
 
-        println!("Bytes read: {bytes_read:#?}");
-        println!("Request: {}", String::from_utf8_lossy(&buffer));
+            let mut line = String::new();
+
+            match reader.read_line(&mut line){
+
+                Err(error) => return Err(error),
+
+                Ok(0) => {
+                    println!("Browser connection closed.");
+                    break;
+                }
+
+                Ok(_bytes_received) => {
+
+                    // last line was read
+                    if line.trim().is_empty(){
+                        continue;
+                    }
+
+                    if let Some(uri) = Self::extract_uri(line){
+
+                        let file_path =Self::get_file_path(&uri);
+                        let file_path = Path::new(&file_path);
+
+                        if file_path.exists(){
+
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+
+        }
 
         Ok(())
+    }
+
+    pub fn sender_tcp_thread(){
+
+    }
+
+    pub fn extract_uri(line: String) -> Option<String>{
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+
+        if parts.len() > 2{
+
+            let uri = parts[1];
+
+            match uri.strip_prefix("/"){
+                Some("") => Some("/index.html".to_string()),
+                Some(_) => Some(uri.to_string()),
+                None => None
+            }
+
+        }else{
+            None
+        }
+    }
+
+    pub fn get_file_path(uri: &str) -> String{
+        return format!("{}/{}", CACHE_PATH, encode_path(uri));
     }
 
 }

@@ -1,2 +1,6 @@
-/target
-/test_things
+**/target/
+
+
+**/*.rs.bk
+.idea/
+.vscode/

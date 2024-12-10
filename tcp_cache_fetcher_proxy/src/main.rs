@@ -1,7 +1,8 @@
+use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use utils::tcp_proxy::TcpProxyBuilder;
-
-fn main() {
+use io::Result;
+fn main() -> Result<()> {
 
     let mut tcp_proxy = TcpProxyBuilder::new()
         .port(7879)
@@ -10,6 +11,6 @@ fn main() {
         .sctp_proxy_port(7878)
         .build();
 
-    tcp_proxy.start().unwrap();
-
+    tcp_proxy.start()?;
+    Ok(())
 }

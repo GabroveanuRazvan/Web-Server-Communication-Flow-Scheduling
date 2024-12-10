@@ -206,6 +206,11 @@ impl SctpProxy{
 
                     Err(error) => return Err(From::from(error)),
 
+                    Ok(0) =>{
+                        println!("Sctp connection closed!");
+                        break;
+                    }
+
                     Ok(1) => {
                         println!("File was processed");
 
