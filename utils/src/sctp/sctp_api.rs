@@ -13,6 +13,7 @@ use super::super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, w
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
 pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 pub const MAX_STREAM_NUMBER: u16 = 10;
+
 pub trait SctpPeerBuilder{
     fn new() -> Self;
     fn socket(self) -> Self;

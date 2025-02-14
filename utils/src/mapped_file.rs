@@ -44,6 +44,8 @@ impl MappedFile{
 
         self.mmap[old_size..self.file_size].copy_from_slice(data);
 
+        self.mmap.flush()?;
+
         Ok(())
     }
 
@@ -77,4 +79,51 @@ impl Ord for MappedFile{
     fn cmp(&self, other: &Self) -> Ordering{
         self.file_size.cmp(&other.file_size)
     }
+}
+
+#[cfg(test)]
+
+mod tests{
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use super::*;
+
+    #[test]
+    fn test_mapped_file1(){
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("tests/mapped-file-1.txt")
+            .unwrap();
+
+        let mapped_file = MappedFile::new(file).unwrap();
+
+        assert_eq!(mapped_file.file_size, 0);
+
+    }
+
+    #[test]
+    fn test_mapped_file2(){
+
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("tests/mapped-file-2.txt")
+            .unwrap();
+
+        let file_content = "something random".to_string();
+        file.write_all(file_content.as_bytes()).unwrap();
+
+        let mapped_file = MappedFile::new(file).unwrap();
+
+        assert_eq!(mapped_file.file_size, file_content.len());
+
+    }
+
+
 }

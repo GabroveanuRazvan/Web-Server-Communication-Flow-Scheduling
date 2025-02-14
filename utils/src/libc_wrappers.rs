@@ -276,6 +276,8 @@ pub fn debug_sctp_sndrcvinfo(info: &SctpSenderInfo) {
 
 /// Builders
 
+
+/// File mode builder for the C mode_t: https://man7.org/linux/man-pages/man3/mode_t.3type.html#top_of_page
 pub struct ModeBuilder{
     mode: u32,
 }

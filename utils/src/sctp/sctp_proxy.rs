@@ -14,7 +14,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use http::Uri;
 use memmap2::MmapMut;
-use crate::http_parsers::{basic_http_get_request, encode_path, extracts_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
+use crate::http_parsers::{basic_http_get_request, encode_path, extract_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
 use crate::constants::{KILOBYTE, MEGABYTE};
@@ -155,7 +155,7 @@ impl SctpProxy{
                 let file_path = format!("{}/{}{}", CACHE_PATH, file_name, DOWNLOAD_SUFFIX);
                 let file_path = Path::new(&file_path);
 
-                // check if the current file already exists, might be useful in a multithreaded context
+                // check if the current file already exists, might be useful in a multi-threaded context
                 if file_path.exists(){
                     continue;
                 }
@@ -183,9 +183,9 @@ impl SctpProxy{
     }
 
     /// Sctp thread that reads the incoming messages of the server.
-    /// The server sends chunked files that need downloading.
+    /// The server sends chunked files that need to be downloaded.
     /// Each file is identified through a unique ppid value.
-    /// After the message is received it is sent to a download thread pool to be processed.
+    /// After the message is received, it is sent to a download thread pool to be processed.
     ///
     pub fn receiver_sctp_thread(sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
 
@@ -427,7 +427,7 @@ impl SctpProxy{
 
                     if uri.ends_with(".html"){
 
-                        let future_uri = extracts_http_paths(String::from_utf8_lossy(mmap_ptr).as_ref());
+                        let future_uri = extract_http_paths(String::from_utf8_lossy(mmap_ptr).as_ref());
 
                         for uri in future_uri {
 

@@ -156,7 +156,7 @@ pub fn basic_http_get_request(uri: &str) -> Request<()> {
 
 }
 
-pub fn extracts_http_paths(html_content: &str) -> Vec<String> {
+pub fn extract_http_paths(html_content: &str) -> Vec<String> {
 
     // parse the html document
     let document = Html::parse_document(&html_content);

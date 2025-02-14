@@ -203,14 +203,6 @@ impl ConnectionWorker{
 
                     let (job,ppid) = job_pair;
 
-                    // // create the response and send it
-                    // let mut response_bytes = http_response_to_string(basic_http_response(job.file_size())).into_bytes();
-                    //
-                    // match stream.write_all(&mut response_bytes,stream_number,ppid,0){
-                    //     Ok(_bytes) => (),
-                    //     Err(e) => println!("Write Error: {:?}",e)
-                    // }
-
                     // send the body of the response chunk by chunk
 
                     let mut current_chunk: u32 = 0;

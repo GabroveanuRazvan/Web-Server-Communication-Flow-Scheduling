@@ -9,9 +9,9 @@ use std::os::fd::RawFd;
 #[derive(Debug)]
 pub struct SctpStream{
     sock_fd: RawFd,
-    // this will be completed if the stream was created by an accept call or be the first peer address if the client connects
+    // this will be assigned if the stream was created by an accept call or by a connect call
     address: SocketAddrV4,
-    // this will be completed if the stream calls connect
+    // this will be assigned when the stream calls connect
     peer_addresses: Option<Vec<Ipv4Addr>>,
     // if the stream is created by accept this will be None
     active_events: Option<SctpEventSubscribe>,
@@ -50,7 +50,7 @@ impl SctpStream{
         // convert the ivp4 peer addresses to C sockaddr_in
         for address in peer_addresses{
 
-            let mut current_socket_address: SockAddrIn = new_sock_addr_in(self.address.port(),address.clone());
+            let current_socket_address: SockAddrIn = new_sock_addr_in(self.address.port(),address.clone());
 
             debug_sockaddr(&current_socket_address);
 
