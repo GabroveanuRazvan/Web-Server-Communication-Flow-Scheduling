@@ -205,3 +205,22 @@ pub fn encode_path(path: &str) -> String {
 pub fn decode_path(encoded: &str) -> String {
     encoded.replace("__", "/")
 }
+
+/// Extracts the uri of a request line from an HTTP request.
+pub fn extract_uri(line: String) -> Option<String>{
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    if parts.len() > 2{
+
+        let uri = parts[1];
+
+        match uri.strip_prefix("/"){
+            Some("") => Some("/index.html".to_string()),
+            Some(_) => Some(uri.to_string()),
+            None => None
+        }
+
+    }else{
+        None
+    }
+}
