@@ -16,6 +16,8 @@ use crate::pools::thread_pool::ThreadPool;
 const BUFFER_SIZE: usize = 4 * KILOBYTE;
 const CHUNK_SIZE: usize = 4 * KILOBYTE;
 
+const NUM_THREADS: usize = 6;
+
 /// Structure used to store the sender for each thread to be notified about the complete download of the requested file
 static DOWNLOADING_FILES: LazyLock<RwLock<HashMap<PathBuf,Sender<bool>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
@@ -36,7 +38,7 @@ impl TcpProxy{
     pub fn start(self) ->Result<()> {
 
         let browser_server = TcpListener::bind(SocketAddrV4::new(self.tcp_address, self.port))?;
-        let client_pool = ThreadPool::new(6);
+        let client_pool = ThreadPool::new(NUM_THREADS);
 
         println!("Listening on {}:{}", self.tcp_address,self.port);
 
@@ -173,9 +175,11 @@ impl TcpProxy{
 
                         // Retrieve the transmitter and send a signal
                         let download_map = DOWNLOADING_FILES.read().unwrap();
-                        let sender = download_map.get(&PathBuf::from(file_name)).unwrap();
 
-                        sender.send(true).unwrap();
+                        if let Some(sender) = download_map.get(&PathBuf::from(file_name)){
+                            sender.send(true).unwrap();
+                        }
+
 
                     }
                 }
