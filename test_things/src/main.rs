@@ -16,7 +16,12 @@ use utils::tcp_proxy::TcpProxy;
 
 fn main(){
 
-    let m = Mutex::new(false);
+
+    let i: i32 = 256;
+    let bytes = i.to_be_bytes();
+
+    println!("{:?}", bytes);
+
 
 }
 
