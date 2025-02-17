@@ -16,10 +16,13 @@ pub mod cache{
     pub mod temp_file_manager;
 }
 
+pub mod packets{
+    pub mod byte_packet;
+}
+
 pub mod libc_wrappers;
 pub mod http_parsers;
 pub mod mapped_file;
 pub mod constants;
 pub mod tcp_proxy;
 pub mod shared_memory;
-pub mod byte_packet;

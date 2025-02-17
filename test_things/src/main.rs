@@ -9,18 +9,14 @@ use std::sync::Mutex;
 use std::thread::park;
 use std::time::Duration;
 use utils::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo};
+use utils::packets::byte_packet::BytePacket;
 use utils::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder};
 use utils::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use utils::sctp::sctp_server::SctpServerBuilder;
 use utils::tcp_proxy::TcpProxy;
 
+
 fn main(){
-
-
-    let i: i32 = 256;
-    let bytes = i.to_be_bytes();
-
-    println!("{:?}", bytes);
 
 
 }
