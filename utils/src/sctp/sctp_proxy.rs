@@ -8,7 +8,7 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{mpsc, Arc, LazyLock, RwLock};
 use std::sync::atomic::AtomicU32;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -40,6 +40,9 @@ pub struct SctpProxy{
     tcp_address: Ipv4Addr,
 }
 
+//ppid map -> maps each payload protocol id to the requested file name (not encoded)
+static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+
 impl SctpProxy{
     /// Method that starts the proxy
     pub fn start(self) -> Result<()>{
@@ -68,9 +71,6 @@ impl SctpProxy{
         sctp_client.options();
 
 
-        //ppid map -> maps each payload protocol id to the requested file name (not encoded)
-        let ppid_map: Arc<RwLock<HashMap<u32,String>>> =  Arc::new(RwLock::new(HashMap::new()));
-
         // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();
 
@@ -78,8 +78,8 @@ impl SctpProxy{
         let receiver_sctp_stream = sctp_client.try_clone()?;
 
         // run the sctp client threads
-        Self::sender_sctp_thread(sender_sctp_stream,Arc::clone(&ppid_map),sctp_rx);
-        Self::receiver_sctp_thread(receiver_sctp_stream,Arc::clone(&ppid_map));
+        Self::sender_sctp_thread(sender_sctp_stream,sctp_rx);
+        Self::receiver_sctp_thread(receiver_sctp_stream);
 
         // for each tcp client init a tcp receiver thread
         for stream in tcp_server.incoming(){
@@ -127,7 +127,7 @@ impl SctpProxy{
     /// Sctp thread that sends incoming requests to the server to be processed.
     /// Each request is mapped to a unique ppid value.
     ///
-    pub fn sender_sctp_thread(sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>, sctp_rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
+    pub fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
 
         println!("Sctp sender thread started!");
 
@@ -163,7 +163,7 @@ impl SctpProxy{
                 File::create(file_path)?;
 
                 // map each request to a payload protocol id
-                let mut ppid_map = ppid_map.write().expect("ppid map lock poisoned");
+                let mut ppid_map = PPID_MAP.write().expect("ppid map lock poisoned");
                 // map the current ppid to the file name
                 ppid_map.insert(current_ppid,file_name);
 
@@ -187,7 +187,7 @@ impl SctpProxy{
     /// Each file is identified through a unique ppid value.
     /// After the message is received, it is sent to a download thread pool to be processed.
     ///
-    pub fn receiver_sctp_thread(sctp_client: SctpStream, ppid_map: Arc<RwLock<HashMap<u32,String>>>) -> JoinHandle<Result<()>>{
+    pub fn receiver_sctp_thread(sctp_client: SctpStream) -> JoinHandle<Result<()>>{
 
         println!("Sctp receiver thread started!");
 
@@ -201,7 +201,6 @@ impl SctpProxy{
 
                 // create a new buffer for each request that will be owned by the thread pool
                 let mut buffer = vec![0;BUFFER_SIZE];
-                let ppid_map = Arc::clone(&ppid_map);
                 match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
                     Err(error) => return Err(From::from(error)),
@@ -217,7 +216,7 @@ impl SctpProxy{
                         // get the ppid
                         let ppid = sender_info.sinfo_ppid as u32;
 
-                        let file_path = Self::get_file_path(Arc::clone(&ppid_map), ppid);
+                        let file_path = Self::get_file_path(ppid);
 
                         let new_file_path = file_path.clone();
                         let new_file_path = new_file_path.strip_suffix(DOWNLOAD_SUFFIX).unwrap();
@@ -233,7 +232,7 @@ impl SctpProxy{
 
                         download_pool.execute(move || {
 
-                            let file_path = Self::get_file_path(Arc::clone(&ppid_map), ppid);
+                            let file_path = Self::get_file_path(ppid);
 
                             // retrieve the chunk index from the first 4 bytes of the payload
                             let chunk_index = u32::from_be_bytes(buffer[..4].try_into().unwrap());
@@ -278,10 +277,10 @@ impl SctpProxy{
 
     /// Based on a payload protocol id, retrieves the file request and formats it into a path to be stored.
     ///
-    fn get_file_path(ppid_map: Arc<RwLock<HashMap<u32,String>>>,ppid: u32) -> String{
+    fn get_file_path(ppid: u32) -> String{
 
         // lock the RwLock and read the file name
-        let ppid_map = ppid_map.read().expect("ppid map lock poisoned");
+        let ppid_map = PPID_MAP.read().expect("ppid map lock poisoned");
         let file_name = encode_path(ppid_map.get(&ppid).unwrap());
 
         // get the actual file path

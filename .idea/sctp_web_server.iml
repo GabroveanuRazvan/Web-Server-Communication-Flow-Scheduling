@@ -13,6 +13,7 @@
       <sourceFolder url="file://$MODULE_DIR$/utils/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test_things/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tcp_cache_fetcher_proxy/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/utils/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/sctp_proxy/target" />
       <excludeFolder url="file://$MODULE_DIR$/server/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
