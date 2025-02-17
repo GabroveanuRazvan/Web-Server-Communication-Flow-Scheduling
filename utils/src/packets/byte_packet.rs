@@ -103,6 +103,33 @@ impl BytePacket{
 
     }
 
+    /// Reads a maximum of 4 or 8 bytes from the buffer, based on the computer arhitecture. Will return an error if the position reaches the end of the buffer.
+    pub fn read_usize(&mut self) -> Result<usize>{
+
+        let pointer_size = size_of::<usize>();
+
+        match pointer_size{
+            8 => Ok(self.read_u64()? as usize),
+            4 => Ok(self.read_u32()? as usize),
+            _ => Err("Unknown pointer size".into()),
+        }
+
+    }
+
+    /// Returns a slice of the buffer starting from the current position. Will return an error if the position is at the end of the buffer.
+    pub fn read_all(&mut self) -> Result<&[u8]>{
+
+        if self.position >= self.buffer_size {
+            return Err("End of buffer".into());
+        }
+
+        let buf_ref = self.buffer[self.position..].as_ref();
+        self.position = self.buffer_size;
+
+        Ok(buf_ref)
+
+    }
+
     /// Reads a single byte at a given position, without advancing the position. Will return an error if the position exceeds the size of the buffer.
     pub fn get_byte(&mut self, position: usize) -> Result<u8>{
 
@@ -237,13 +264,35 @@ mod tests{
 
     }
 
+    #[test]
     fn test_read_u32(){
 
         let buffer = [1,0,0,1];
         let mut packet = BytePacket::from(&buffer);
 
-        assert_eq!(packet.read_u32().unwrap(),(1u32 << 8) + 1);
+        assert_eq!(packet.read_u32().unwrap(),(1u32 << 24) + 1);
         assert_eq!(packet.read_u32().unwrap_or(0),0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_read_usize(){
+        let buffer = [0,0,0,1,0,0,0,1];
+        let mut packet = BytePacket::from(&buffer);
+
+        assert_eq!(packet.read_usize().unwrap(),1);
+        packet.read_usize().unwrap();
+        packet.read_usize().unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_read_all(){
+        let buffer = [1,0,0,1];
+        let mut packet = BytePacket::from(&buffer);
+
+        assert_eq!(packet.read_all().unwrap(),&buffer);
+        packet.read_all().unwrap();
     }
 
     #[test]
@@ -387,7 +436,4 @@ mod tests{
 
 
     }
-
-
-
 }
