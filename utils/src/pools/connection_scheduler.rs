@@ -9,6 +9,7 @@ use crate::constants::BYTE;
 use crate::http_parsers::{basic_http_response, http_response_to_string, string_to_http_request};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::mapped_file::{MappedFile};
+use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_client::SctpStream;
 
 /// Shortest Job First scheduler for a Sctp Stream.
@@ -18,7 +19,7 @@ pub struct ConnectionScheduler{
     heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>,
     stream: Arc<SctpStream>,
     workers: Vec<ConnectionWorker>,
-    chunk_size: usize,
+    packet_size: usize,
     buffer_size: usize,
 
 }
@@ -27,23 +28,23 @@ impl ConnectionScheduler{
 
     /// Creates a worker pool of size and takes a Sctp Stream.
     ///
-    pub fn new(size: usize, stream: SctpStream,buffer_size: usize,chunk_size: usize)-> Self{
+    pub fn new(size: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
         assert!(size > 0);
-        assert!(chunk_size > 4 * BYTE);
+        assert!(packet_size > 4 * BYTE);
 
         let mut workers = Vec::with_capacity(size);
         let stream = Arc::new(stream);
         let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())), Condvar::new()));
 
         for i in 0..size{
-            workers.push(ConnectionWorker::new(i,Arc::clone(&heap),Arc::clone(&stream),chunk_size));
+            workers.push(ConnectionWorker::new(i, Arc::clone(&heap), Arc::clone(&stream), packet_size));
         }
 
         Self{
             heap,
             stream,
             workers,
-            chunk_size,
+            packet_size,
             buffer_size,
         }
 
@@ -159,7 +160,10 @@ pub struct ConnectionWorker{
 impl ConnectionWorker{
     /// Starts the worker thread.
     ///
-    pub fn new(label: usize,heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>, stream: Arc<SctpStream>,chunk_size: usize) -> Self{
+    pub fn new(label: usize, heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>, stream: Arc<SctpStream>, packet_size: usize) -> Self{
+
+        // 6 bytes coming from the leading chunk index + total chunks
+        let chunk_size = packet_size - 6 * BYTE;
 
         let thread = thread::spawn(move||{
 
@@ -203,24 +207,40 @@ impl ConnectionWorker{
 
                     let (job,ppid) = job_pair;
 
-                    // send the body of the response chunk by chunk
 
-                    let mut current_chunk: u32 = 0;
+                    let file_size = job.mmap_as_slice().len();
+                    // Ceil formula for integers
+                    let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
-                    // the chunk size is determined by chunk_size - 4 as the chunk number will be attached to the payload
-                    for chunk in job.mmap_as_slice().chunks(chunk_size - 4){
+                    // Iterate through each chunk and send the packets
+                    for (chunk_index,chunk) in job.mmap_as_slice().chunks(chunk_size).enumerate(){
 
-                        let chunk: Vec<u8> = current_chunk.to_be_bytes().iter().chain(chunk.iter()).copied().collect();
+                        // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
+                        let mut chunk_packet = if chunk_index != chunk_count - 1 {
+                            BytePacket::new(packet_size)
 
-                        // send the chunk
-                        match stream.write_all(chunk.as_slice(),stream_number,ppid,current_chunk){
+                        }
+                        else{
+                            BytePacket::new(chunk.len() + 6)
+                        };
+
+                        chunk_packet.write_u16(chunk_index as u16).unwrap();
+                        chunk_packet.write_u16(chunk_count as u16).unwrap();
+                        chunk_packet.write_u16(chunk_size as u16).unwrap();
+
+                        unsafe{
+                            chunk_packet.write_buffer(chunk).unwrap();
+                        }
+
+                        // Send the chunk
+                        match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
                             Ok(_bytes) => (),
                             Err(e) => println!("Write Error: {:?}",e)
                         }
-                        current_chunk += 1;
+
                     }
 
-                    // send a null character to mark the end of the message
+                    // Send a null character to mark the end of the message
                     match stream.write_null(stream_number,ppid,0){
                         Ok(_bytes) => (),
                         Err(e) => println!("Write Error: {:?}",e)

@@ -214,7 +214,7 @@ impl BytePacket{
 
         let new_buffer_size = buffer.len();
 
-        if self.position + new_buffer_size >= self.buffer_size{
+        if self.position + new_buffer_size - 1 >= self.buffer_size{
            return Err("End of buffer".into());
         }
 
@@ -222,13 +222,15 @@ impl BytePacket{
             ptr::copy_nonoverlapping(buffer.as_ptr(),self.buffer.as_mut_ptr().add(self.position),new_buffer_size)
         }
 
+        self.position += new_buffer_size;
+
         Ok(())
 
     }
 
-    /// Returns the packet buffer.
+    /// Returns the written packet buffer until the position.
     pub fn get_buffer(&self) -> &[u8]{
-        self.buffer.as_slice()
+        self.buffer[0..self.position].as_ref()
     }
 
 }

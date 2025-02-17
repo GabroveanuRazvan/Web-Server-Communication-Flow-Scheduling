@@ -8,7 +8,7 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, LazyLock, RwLock};
+use std::sync::{mpsc, Arc, LazyLock, Mutex, RwLock};
 use std::sync::atomic::AtomicU32;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -17,7 +17,8 @@ use memmap2::MmapMut;
 use crate::http_parsers::{basic_http_get_request, encode_path, extract_http_paths, http_request_to_string, http_response_to_string, string_to_http_request, string_to_http_response};
 use crate::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo, SctpSenderInfo};
 use crate::cache::lru_cache::TempFileCache;
-use crate::constants::{KILOBYTE, MEGABYTE};
+use crate::constants::{BYTE, KILOBYTE, MEGABYTE};
+use crate::packets::byte_packet::BytePacket;
 use crate::pools::thread_pool::ThreadPool;
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
@@ -28,20 +29,21 @@ const DOWNLOAD_THREADS: usize = 6;
 const CACHE_PATH: &str = "/tmp/tmpfs";
 const DOWNLOAD_SUFFIX: &str = ".tmp";
 
+///Maps each payload protocol id to the requested file name (not encoded).
+static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Maps each payload protocol id to the current number of processed file chunks.
+static PROCESSED_CHUNKS_COUNT: LazyLock<Mutex<HashMap<u32,u16>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
 /// The client will connect to the sctp-server using its addresses and send the data to be processes
 pub struct SctpProxy{
-
     port: u16,
     sctp_address: Ipv4Addr,
     sctp_peer_addresses: Vec<Ipv4Addr>,
     tcp_address: Ipv4Addr,
 }
-
-//ppid map -> maps each payload protocol id to the requested file name (not encoded)
-static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 impl SctpProxy{
     /// Method that starts the proxy
@@ -210,20 +212,7 @@ impl SctpProxy{
                         break;
                     }
 
-                    Ok(1) => {
-                        println!("File was processed");
-
-                        // get the ppid
-                        let ppid = sender_info.sinfo_ppid as u32;
-
-                        let file_path = Self::get_file_path(ppid);
-
-                        let new_file_path = file_path.clone();
-                        let new_file_path = new_file_path.strip_suffix(DOWNLOAD_SUFFIX).unwrap();
-
-                        // rename the file to mark it as completed
-                        fs::rename(file_path, new_file_path)?;
-                    }
+                    Ok(1) => (),
 
                     Ok(bytes_read) => {
                         
@@ -234,14 +223,20 @@ impl SctpProxy{
 
                             let file_path = Self::get_file_path(ppid);
 
-                            // retrieve the chunk index from the first 4 bytes of the payload
-                            let chunk_index = u32::from_be_bytes(buffer[..4].try_into().unwrap());
+                            // Parse the received chunk packet
+                            // chunk_index + total_chunks + chunk_size + content
+                            let mut byte_packet = BytePacket::from(&buffer[..bytes_read]);
 
-                            // retrieve the first and last index of the chunk with respect to the first 4 bytes of the payload
-                            let chunk_begin = chunk_index as usize * (CHUNK_SIZE-4);
-                            let chunk_end = chunk_begin + bytes_read - 4;
+                            let chunk_index = byte_packet.read_u16().expect("Unable to read chunk index");
+                            let expected_chunk_num = byte_packet.read_u16().expect("Unable to read expected chunk num");
+                            let original_chunk_size = byte_packet.read_u16().expect("Unable to read chunk size");
+                            let file_chunk = byte_packet.read_all().expect("Unable to read chunk");
+                            let current_chunk_size = bytes_read - 6 * BYTE;
 
-                            // open the already existing file
+                            let chunk_begin = chunk_index as usize * original_chunk_size as usize;
+                            let chunk_end = chunk_begin + current_chunk_size;
+
+                            // Open the already existing file
                             let file = OpenOptions::new()
                                 .read(true)
                                 .write(true)
@@ -251,15 +246,32 @@ impl SctpProxy{
 
                             let file_size = file.metadata().unwrap().len();
 
-                            // resize the file if the size exceeds the current chunk_end size
-                            if chunk_end > file_size as usize {
-                                file.set_len(chunk_begin as u64 + (bytes_read-4) as u64).unwrap();
+                            // Resize the file if the size exceeds the current chunk_end size
+                            if chunk_end >= file_size as usize {
+                                file.set_len(chunk_end as u64).unwrap();
                             }
 
-                            //map the file and write the chunk
+                            // Map the file and write the chunk
                             let mut mmap = unsafe{MmapMut::map_mut(&file).unwrap()};
+                            mmap[chunk_begin..chunk_end].copy_from_slice(file_chunk);
 
-                            mmap[chunk_begin..chunk_end].copy_from_slice(&buffer[4..bytes_read]);
+                            // Add 1 to the total processed chunks
+                            let chunk_count = {
+                                let mut chunk_map = PROCESSED_CHUNKS_COUNT.lock().unwrap();
+
+                                 *chunk_map.entry(ppid)
+                                    .and_modify(|count| *count += 1)
+                                    .or_insert(1)
+                            };
+
+                            // Rename the file to mark it as completed
+                            if chunk_count == expected_chunk_num{
+
+                                let file_path_clone = file_path.clone();
+                                let new_file_path = file_path.strip_suffix(DOWNLOAD_SUFFIX).unwrap();
+                                fs::rename(file_path_clone, new_file_path).expect("Unable to rename file");
+
+                            }
 
 
                         })

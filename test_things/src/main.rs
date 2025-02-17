@@ -18,6 +18,19 @@ use utils::tcp_proxy::TcpProxy;
 
 fn main(){
 
+    let buf = [0u8;4];
+
+    let mut packet = BytePacket::from(&buf);
+
+    packet.write(2).unwrap();
+
+    unsafe {
+        packet.write_buffer(&[1;3]).unwrap();
+    }
+
+    println!("{:?}",packet.get_buffer());
+
+
 
 }
 

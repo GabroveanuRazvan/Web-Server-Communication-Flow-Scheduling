@@ -10,7 +10,7 @@ use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_AD
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
 use crate::constants::{KILOBYTE};
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
-const CHUNK_SIZE: usize = 64 * KILOBYTE;
+const FILE_PACKET_SIZE: usize = 64 * KILOBYTE;
 const THREAD_POOL_SIZE: usize = 6;
 
 #[derive(Debug)]
@@ -106,7 +106,7 @@ impl SctpServer{
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        let mut scheduler = ConnectionScheduler::new(THREAD_POOL_SIZE,stream,BUFFER_SIZE,CHUNK_SIZE);
+        let mut scheduler = ConnectionScheduler::new(THREAD_POOL_SIZE,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
 
         scheduler.start();
 
