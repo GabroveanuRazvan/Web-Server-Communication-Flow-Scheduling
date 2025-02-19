@@ -12,6 +12,9 @@ use crate::mapped_file::{MappedFile};
 use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_client::SctpStream;
 
+
+const PACKET_METADATA_SIZE: usize = 14 * BYTE;
+
 /// Shortest Job First scheduler for a Sctp Stream.
 ///
 pub struct ConnectionScheduler{
@@ -84,7 +87,7 @@ impl ConnectionScheduler{
                 break;
             }
 
-            debug_sctp_sndrcvinfo(&sender_info);
+            // debug_sctp_sndrcvinfo(&sender_info);
 
             let path_request = String::from_utf8_lossy(&buffer[..bytes_read]);
 
@@ -162,8 +165,9 @@ impl ConnectionWorker{
     ///
     pub fn new(label: usize, heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>, stream: Arc<SctpStream>, packet_size: usize) -> Self{
 
-        // 6 bytes coming from the leading chunk index + total chunks
-        let chunk_size = packet_size - 6 * BYTE;
+
+        // 14 bytes coming from the leading chunk index + total chunks + chunk_size + file_size
+        let chunk_size = packet_size - PACKET_METADATA_SIZE;
 
         let thread = thread::spawn(move||{
 
@@ -221,12 +225,13 @@ impl ConnectionWorker{
 
                         }
                         else{
-                            BytePacket::new(chunk.len() + 6)
+                            BytePacket::new(chunk.len() + PACKET_METADATA_SIZE)
                         };
 
                         chunk_packet.write_u16(chunk_index as u16).unwrap();
                         chunk_packet.write_u16(chunk_count as u16).unwrap();
                         chunk_packet.write_u16(chunk_size as u16).unwrap();
+                        chunk_packet.write_u64(file_size as u64).unwrap();
 
                         unsafe{
                             chunk_packet.write_buffer(chunk).unwrap();

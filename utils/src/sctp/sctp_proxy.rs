@@ -35,6 +35,9 @@ static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock
 /// Maps each payload protocol id to the current number of processed file chunks.
 static PROCESSED_CHUNKS_COUNT: LazyLock<Mutex<HashMap<u32,u16>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// For each ppid map a bool value which determines if a file was resized to its whole size.
+static FILE_RESIZED: LazyLock<RwLock<HashMap<u32,RwLock<bool>>>> =  LazyLock::new(|| RwLock::new(HashMap::new()));
+
 /// Abstraction for a tcp to sctp proxy
 /// The tcp server will listen on a given address and redirect its data to the sctp client
 /// The client will connect to the sctp-server using its addresses and send the data to be processes
@@ -101,8 +104,6 @@ impl SctpProxy{
     ///
     fn receiver_tcp_thread(tcp_stream: TcpStream, sctp_tx: Sender<Vec<u8>>) -> JoinHandle<Result<()>>{
 
-        println!("Got new tcp client! Tcp receiver thread started.");
-
         let reader = BufReader::new(tcp_stream);
 
         thread::spawn(move || {
@@ -110,8 +111,6 @@ impl SctpProxy{
             for line in reader.lines(){
 
                 let request = line?;
-
-                println!("Got a tcp request!");
 
                 sctp_tx.send(request.as_bytes().to_vec()).map_err(
                     |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
@@ -129,7 +128,7 @@ impl SctpProxy{
     /// Sctp thread that sends incoming requests to the server to be processed.
     /// Each request is mapped to a unique ppid value.
     ///
-    pub fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
+    fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
 
         println!("Sctp sender thread started!");
 
@@ -156,23 +155,27 @@ impl SctpProxy{
                 let file_path = format!("{}/{}{}", CACHE_PATH, file_name, DOWNLOAD_SUFFIX);
                 let file_path = Path::new(&file_path);
 
-                // check if the current file already exists, might be useful in a multithreaded context
+                // Check if the current file already exists, might be useful in a multithreaded context
                 if file_path.exists(){
                     continue;
                 }
 
-                println!("Creating file: {:?}", file_path);
+                // println!("Creating file: {:?}", file_path);
                 File::create(file_path)?;
 
-                // map each request to a payload protocol id
+                // Create a new entry into the resized file map to mark it as empty
+                let mut file_resized = FILE_RESIZED.write().unwrap();
+                file_resized.insert(current_ppid,RwLock::new(false));
+
+                // Map each request to a payload protocol id
                 let mut ppid_map = PPID_MAP.write().expect("ppid map lock poisoned");
-                // map the current ppid to the file name
+                // Map the current ppid to the file name
                 ppid_map.insert(current_ppid,file_name);
 
-                // send the request to the server
+                // Send the request to the server
                 sctp_client.write_all(&request_buffer,stream_number,current_ppid,0)?;
 
-                // round-robin over the streams
+                // Round-robin over the streams
                 stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
                 current_ppid += 1;
 
@@ -189,7 +192,7 @@ impl SctpProxy{
     /// Each file is identified through a unique ppid value.
     /// After the message is received, it is sent to a download thread pool to be processed.
     ///
-    pub fn receiver_sctp_thread(sctp_client: SctpStream) -> JoinHandle<Result<()>>{
+    fn receiver_sctp_thread(sctp_client: SctpStream) -> JoinHandle<Result<()>>{
 
         println!("Sctp receiver thread started!");
 
@@ -224,14 +227,15 @@ impl SctpProxy{
                             let file_path = Self::get_file_path(ppid);
 
                             // Parse the received chunk packet
-                            // chunk_index + total_chunks + chunk_size + content
+                            // chunk_index + total_chunks + chunk_size + file_size + content
                             let mut byte_packet = BytePacket::from(&buffer[..bytes_read]);
 
                             let chunk_index = byte_packet.read_u16().expect("Unable to read chunk index");
                             let expected_chunk_num = byte_packet.read_u16().expect("Unable to read expected chunk num");
                             let original_chunk_size = byte_packet.read_u16().expect("Unable to read chunk size");
+                            let file_size = byte_packet.read_u64().expect("Unable to read file size");
                             let file_chunk = byte_packet.read_all().expect("Unable to read chunk");
-                            let current_chunk_size = bytes_read - 6 * BYTE;
+                            let current_chunk_size = bytes_read - 14 * BYTE;
 
                             let chunk_begin = chunk_index as usize * original_chunk_size as usize;
                             let chunk_end = chunk_begin + current_chunk_size;
@@ -244,15 +248,48 @@ impl SctpProxy{
                                 .open(&file_path)
                                 .expect(format!("Unexpected file that does not exist: {}",file_path).as_str());
 
-                            let file_size = file.metadata().unwrap().len();
+                            // Set the file size if necessary
 
-                            // Resize the file if the size exceeds the current chunk_end size
-                            if chunk_end >= file_size as usize {
-                                file.set_len(chunk_end as u64).unwrap();
+                            {
+                                // Read the map, and get a read lock to the flag value
+                                let file_resized = FILE_RESIZED.read().unwrap();
+                                let flag_lock = file_resized.get(&ppid).unwrap();
+                                let flag_value = flag_lock.read().unwrap();
+
+                                // Check if the file was resized already
+                                if !*flag_value{
+
+                                    // Drop the read guard
+                                    drop(flag_value);
+
+                                    // Get a write guard
+                                    let mut flag_value = flag_lock.write().unwrap();
+
+                                    // Check again if the file still needs to be resized and do it
+                                    if !*flag_value{
+                                        *flag_value = true;
+                                        file.set_len(file_size).unwrap();
+
+                                    }
+
+                                }
                             }
+
+
+
+                            // let file_size = file.metadata().unwrap().len();
+                            //
+                            // // TODO mare problema aici
+                            // // Resize the file if the size exceeds the current chunk_end size
+                            // if chunk_end >= file_size as usize {
+                            //     file.set_len(chunk_end as u64).unwrap();
+                            // }
+
+                            println!("Mapping file {} of chunk {} out of {}",file_path,chunk_index,expected_chunk_num);
 
                             // Map the file and write the chunk
                             let mut mmap = unsafe{MmapMut::map_mut(&file).unwrap()};
+
                             mmap[chunk_begin..chunk_end].copy_from_slice(file_chunk);
 
                             // Add 1 to the total processed chunks
@@ -267,8 +304,11 @@ impl SctpProxy{
                             // Rename the file to mark it as completed
                             if chunk_count == expected_chunk_num{
 
+
                                 let file_path_clone = file_path.clone();
                                 let new_file_path = file_path.strip_suffix(DOWNLOAD_SUFFIX).unwrap();
+                                println!("Renaming file {new_file_path}");
+
                                 fs::rename(file_path_clone, new_file_path).expect("Unable to rename file");
 
                             }
@@ -286,6 +326,9 @@ impl SctpProxy{
         })
 
     }
+
+    // pub fn prefetch_thread()
+
 
     /// Based on a payload protocol id, retrieves the file request and formats it into a path to be stored.
     ///

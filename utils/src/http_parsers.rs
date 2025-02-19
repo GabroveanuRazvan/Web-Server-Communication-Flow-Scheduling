@@ -172,6 +172,7 @@ pub fn extract_http_paths(html_content: &str) -> Vec<String> {
 
             let path = href.to_string();
 
+            // Skip link paths
             if path.starts_with("https"){
                continue;
             }

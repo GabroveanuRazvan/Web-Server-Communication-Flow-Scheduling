@@ -1,36 +1,23 @@
-use inotify::{EventMask, Inotify, WatchMask};
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpStream};
-use std::path::Path;
-use std::{fs, thread};
-use std::fs::OpenOptions;
-use std::os::unix;
-use std::sync::Mutex;
-use std::thread::park;
-use std::time::Duration;
-use utils::libc_wrappers::{debug_sctp_sndrcvinfo, new_sctp_sndrinfo};
-use utils::packets::byte_packet::BytePacket;
-use utils::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder};
-use utils::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
-use utils::sctp::sctp_server::SctpServerBuilder;
-use utils::tcp_proxy::TcpProxy;
+use std::collections::HashMap;
+use memmap2::{Mmap, MmapMut};
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::process::Command;
+use std::sync::RwLock;
 
+fn main() {
 
-fn main(){
+    let map : RwLock<HashMap<i32,RwLock<bool>>> = RwLock::new(HashMap::new());
 
-    let buf = [0u8;4];
-
-    let mut packet = BytePacket::from(&buf);
-
-    packet.write(2).unwrap();
-
-    unsafe {
-        packet.write_buffer(&[1;3]).unwrap();
+    map.write().unwrap().insert(1,RwLock::new(true));
+    let map_guard = map.read().unwrap();
+    {
+        let mut val = map_guard.get(&1).unwrap().write().unwrap();
+        *val = false;
     }
 
-    println!("{:?}",packet.get_buffer());
 
-
+    println!("{:#?}",map_guard.get(&1).unwrap().read().unwrap());
 
 }
 
