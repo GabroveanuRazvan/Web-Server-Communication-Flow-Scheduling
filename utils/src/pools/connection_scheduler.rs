@@ -94,7 +94,8 @@ impl ConnectionScheduler{
             let path = match path_request.trim() {
                 "/" => "./index.html".to_string(),
                 _ => {
-                    String::from(".") + &path_request
+                    // Remove query operator ? in path
+                    String::from(".") + &path_request.trim_end_matches("?")
                 }
             };
 

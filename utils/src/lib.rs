@@ -26,3 +26,4 @@ pub mod mapped_file;
 pub mod constants;
 pub mod tcp_proxy;
 pub mod shared_memory;
+pub mod html_prefetch_service;
