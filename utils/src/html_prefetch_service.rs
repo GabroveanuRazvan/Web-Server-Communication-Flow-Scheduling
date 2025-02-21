@@ -4,6 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use io::Result;
 use memmap2::Mmap;
+use path_clean::PathClean;
 use crate::http_parsers::extract_http_paths;
 
 
@@ -61,25 +62,6 @@ impl HtmlPrefetchService {
                         continue;
                     }
 
-                    // Closure used in a filter_map() call. Returns the file size of a path if the file size can be read.
-                    let get_file_size = |path| -> Option<u64>{
-
-                        let file = match File::open(path){
-                            Ok(f) => f,
-                            Err(_) => return None,
-                        };
-
-                        let file_size = match file.metadata(){
-
-                            Ok(metadata) => metadata.len(),
-                            Err(_) => return None
-
-                        };
-
-                        Some(file_size)
-
-                    };
-
                     //Get the unique file paths
                     let unique_dependencies = dependencies.iter()
                         .map(|path| file_parent.join(path))
@@ -87,20 +69,20 @@ impl HtmlPrefetchService {
 
                     // Get a vector of the file sizes
                     let dependencies_sizes: Vec<u64> = unique_dependencies.iter()
-                        .filter_map(get_file_size)
+                        .filter_map(Self::get_file_size)
                         .collect();
 
                     // Pair the file paths with their sizes
                     let mut paired_dependencies: Vec<_> = unique_dependencies.iter().zip(dependencies_sizes.iter()).collect();
                     paired_dependencies.sort_by_key(|&(_path,size)| size);
 
-                    // Sort the file paths based on their sizes
+                    // Sort the file paths based on their sizes; also clean the paths
                     let sorted_dependencies: Vec<_> = paired_dependencies.iter()
-                        .map(|&(path,_size)| path.clone() )
+                        .map(|&(path,_size)| path.clone().clean() )
                         .collect();
 
                     // Insert the new entry
-                    self.html_links.insert(path,sorted_dependencies);
+                    self.html_links.insert(path.clean(),sorted_dependencies);
 
 
                 }
@@ -110,6 +92,23 @@ impl HtmlPrefetchService {
         }
 
         Ok(())
+    }
+
+    /// Closure used in a filter_map() call. Returns the file size of a path if the file size can be read.
+    fn get_file_size(path : impl AsRef<Path>) -> Option<u64>{
+        let file = match File::open(path){
+            Ok(f) => f,
+            Err(_) => return None,
+        };
+
+        let file_size = match file.metadata(){
+
+            Ok(metadata) => metadata.len(),
+            Err(_) => return None
+
+        };
+
+        Some(file_size)
     }
 
     /// Consumes the service, returning the built map

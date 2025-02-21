@@ -6,66 +6,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, RwLock};
+use path_clean::PathClean;
 use utils::html_prefetch_service::HtmlPrefetchService;
 use utils::http_parsers::extract_http_paths;
-
-struct PrefetchService{
-
-    map: HashMap<PathBuf,HashSet<PathBuf>>
-
-}
-
-impl PrefetchService{
-
-    fn new() -> Self{
-        Self{map: HashMap::new()}
-    }
-    fn get_files<T: AsRef<Path>>(&mut self, file_path: T){
-
-        let entry_it = fs::read_dir(file_path).unwrap();
-
-        for entry in entry_it {
-            let path = entry.unwrap().path();
-
-            if path.is_dir(){
-                self.get_files(&path);
-            }
-
-            if let Some(extension) = path.extension()  {
-
-                if extension == "html"{
-
-                    let file = OpenOptions::new()
-                        .read(true)
-                        .write(false)
-                        .create(false)
-                        .open(&path).unwrap();
-
-                    let file_parent = path.parent().unwrap();
-
-                    let mmap = unsafe{Mmap::map(&file).unwrap()};
-                    let file_content = std::str::from_utf8(&mmap).unwrap();
-
-                    let paths = extract_http_paths(file_content).iter().map(|path| file_parent.join(path)).collect::<HashSet<PathBuf>>();
-
-                    if self.map.contains_key(&path) {
-                        panic!("Key should not exist");
-                    }
-
-                    if !paths.is_empty(){
-                        self.map.insert(path,paths);
-                    }
-
-
-                }
-
-            }
-
-        }
-
-    }
-}
-
 
 
 fn main() {
@@ -78,7 +21,8 @@ fn main() {
 
     println!("{:#?}", map);
 
-
+    let a = PathBuf::from("./web_files");
+    println!("{:#?}", a.clean());
 
 }
 
