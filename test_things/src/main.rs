@@ -9,20 +9,14 @@ use std::sync::{LazyLock, RwLock};
 use path_clean::PathClean;
 use utils::html_prefetch_service::HtmlPrefetchService;
 use utils::http_parsers::extract_http_paths;
+use std::num::Wrapping;
+
 
 
 fn main() {
 
-    let mut p = HtmlPrefetchService::new();
+    let mut p = 0u32;
 
-    p.build_prefetch_links("./web_files").unwrap();
-
-    let map = p.get_links();
-
-    println!("{:#?}", map);
-
-    let a = PathBuf::from("./web_files");
-    println!("{:#?}", a.clean());
 
 }
 

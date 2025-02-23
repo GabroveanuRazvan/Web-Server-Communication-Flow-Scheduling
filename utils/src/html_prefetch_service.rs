@@ -24,6 +24,8 @@ impl HtmlPrefetchService {
         }
     }
 
+    /// Recursively walk across the root directory and process each file.
+    /// Each html file will be parsed, and each used file path will be stored as an entry into the html_links map.
     pub fn build_prefetch_links<T: AsRef<Path>>(&mut self, root: T) -> Result<()>{
 
         // Read the root directory and iterate over its files

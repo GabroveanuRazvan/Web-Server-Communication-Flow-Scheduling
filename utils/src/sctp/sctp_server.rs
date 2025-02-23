@@ -4,7 +4,8 @@ use std::net::Ipv4Addr;
 use std::os::fd::RawFd;
 use std::path::Path;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS};
-use crate::pools::connection_scheduler::ConnectionScheduler;
+use crate::pools::connection_scheduler_old;
+use crate::pools::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
@@ -106,7 +107,8 @@ impl SctpServer{
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        let mut scheduler = ConnectionScheduler::new(THREAD_POOL_SIZE,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
+        // let mut scheduler = connection_scheduler_old::ConnectionScheduler::new(THREAD_POOL_SIZE,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
+        let mut scheduler = connection_scheduler::ConnectionScheduler::new(stream,THREAD_POOL_SIZE,FILE_PACKET_SIZE,BUFFER_SIZE);
 
         scheduler.start();
 

@@ -1,265 +1,211 @@
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
 use std::fs::OpenOptions;
-use std::sync::{Arc, Condvar, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc::Receiver;
 use std::thread;
 use std::thread::JoinHandle;
+use memmap2::Mmap;
+use path_clean::PathClean;
 use crate::constants::BYTE;
-use crate::libc_wrappers::{new_sctp_sndrinfo, SctpSenderInfo};
-use crate::mapped_file::{MappedFile};
+use crate::html_prefetch_service::HtmlPrefetchService;
 use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_client::SctpStream;
 
+pub struct ConnectionScheduler {
 
-const PACKET_METADATA_SIZE: usize = 14 * BYTE;
-
-/// Shortest Job First scheduler for a Sctp Stream.
-///
-pub struct ConnectionScheduler{
-
-    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>,
-    stream: Arc<SctpStream>,
-    workers: Vec<ConnectionWorker>,
+    num_workers: usize,
     packet_size: usize,
-    buffer_size: usize,
+    receive_buffer_size: usize,
+    stream: Arc<SctpStream>,
+    ppid_counter: u32,
+    worker_threads: Vec<SchedulerWorker>,
 
 }
 
-impl ConnectionScheduler{
+impl ConnectionScheduler {
 
-    /// Creates a worker pool of size and takes a Sctp Stream.
-    ///
-    pub fn new(size: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
-        assert!(size > 0);
-        assert!(packet_size > 4 * BYTE);
+    pub fn new(stream: SctpStream, num_workers: usize, packet_size: usize, receive_buffer_size: usize) -> Self {
 
-        let mut workers = Vec::with_capacity(size);
-        let stream = Arc::new(stream);
-        let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())), Condvar::new()));
-
-        for i in 0..size{
-            workers.push(ConnectionWorker::new(i, Arc::clone(&heap), Arc::clone(&stream), packet_size));
-        }
+        assert!(packet_size > 0);
+        assert!(num_workers > 0);
 
         Self{
-            heap,
-            stream,
-            workers,
+            num_workers,
             packet_size,
-            buffer_size,
+            receive_buffer_size,
+            stream: Arc::new(stream),
+            ppid_counter: 0,
+            worker_threads: Vec::with_capacity(num_workers),
         }
 
     }
 
-    /// Pushes on the scheduler min-heap a new MappedFile as a job.
-    pub fn schedule_job(&self,job: (MappedFile,u32)){
-        // get a reference to the heap and condition variable
-        let (mutex,cvar) = &*self.heap;
+    /// Returns the current ppid. Increments it with intentional overflow behaviour.
+    fn next_ppid(&mut self)-> u32{
 
-        // acquire the heap and push the new Job
-        let mut heap_guard = mutex.lock().unwrap();
+        let ppid = self.ppid_counter;
+        self.ppid_counter = self.ppid_counter.wrapping_add(1);
+        ppid
 
-        heap_guard.as_mut()
-            .unwrap()
-            .push(Reverse(job));
-
-        // unlock the heap and notify one of the workers
-        drop(heap_guard);
-        cvar.notify_one();
     }
 
-    /// Method that consumes and starts the scheduler.
-    /// Reads the requests from the Sctp Stream, process them and schedule them.
-    ///
-    pub fn start(self){
-        let mut buffer: Vec<u8> = vec![0;self.buffer_size];
-        let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
+    pub fn start(mut self) {
 
+        // Init a prefetch service and use it to process the html files
+        let mut prefetch_service = HtmlPrefetchService::new();
 
-        loop {
+        // The current working directory should be set to the server root
+        let server_root =  PathBuf::from("./");
+        prefetch_service.build_prefetch_links(server_root).expect("HTML prefetch service build error");
+        let html_links = prefetch_service.get_links();
 
-            let bytes_read = self.stream.read(&mut buffer, Some(&mut sender_info), None).unwrap();
-            let ppid = sender_info.sinfo_ppid as u32;
+        // Prepare and create the workers
+        let stream = Arc::clone(&self.stream);
+        let (job_tx,job_rx) = mpsc::channel();
 
-            if bytes_read == 0 {
-                break;
+        let job_rx = Arc::new(Mutex::new(job_rx));
+
+        for worker_stream in 0..self.num_workers {
+
+            let stream = Arc::clone(&stream);
+            let job_rx = Arc::clone(&job_rx);
+            let worker = SchedulerWorker::new(worker_stream as u16,stream,self.packet_size,job_rx);
+            self.worker_threads.push(worker);
+
+        }
+
+        let mut buffer = vec![0u8; self.receive_buffer_size];
+        let empty_vec = Vec::new();
+
+        loop{
+            match stream.read(buffer.as_mut_slice(),None,None){
+
+                Ok(0) => {
+                    println!("Connection closed");
+                }
+
+                Err(e) => {
+                    panic!("Error reading from sctp stream: {}", e);
+                }
+
+                Ok(bytes_read) =>{
+
+                    // Read the requested path and clean it
+                    let path_request = String::from_utf8_lossy(&buffer[..bytes_read]);
+
+                    let path = match path_request.trim() {
+                        "/" => "./index.html".to_string(),
+                        _ => {
+                            // Remove query operator ? in path
+                            String::from(".") + &path_request.trim_end_matches("?")
+                        }
+                    };
+
+                    let path = PathBuf::from(path).clean();
+                    let ppid = self.next_ppid();
+
+                    // Get the dependencies if they exist and send the request to the workers to be processed
+                    let dependencies = html_links.get(&path).unwrap_or(&empty_vec);
+
+                    job_tx.send((path,ppid)).unwrap();
+
+                    for prefetched_path in dependencies {
+                        let ppid = self.next_ppid();
+                        job_tx.send((prefetched_path.clone(),ppid)).unwrap();
+                    }
+
+                }
+
             }
 
-            // debug_sctp_sndrcvinfo(&sender_info);
-
-            let path_request = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-            let path = match path_request.trim() {
-                "/" => "./index.html".to_string(),
-                _ => {
-                    // Remove query operator ? in path
-                    String::from(".") + &path_request.trim_end_matches("?")
-                }
-            };
-
-            let file = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(false)
-                .truncate(false)
-                .open(path);
-
-            let file = file.unwrap_or_else(|_|
-                OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(false)
-                .truncate(false)
-                .open("./404.html").unwrap()
-            );
-
-            let mapped_file = MappedFile::new(file).unwrap();
-
-            self.schedule_job((mapped_file,ppid));
-
-        }
-    }
-
-}
-
-/// Drop trait used to gracefully shut down all worker threads.
-///
-impl Drop for ConnectionScheduler
-{
-    fn drop(&mut self){
-
-        // acquire the mutex
-        let (mutex,cvar) = &*self.heap;
-        let mut heap_guard = mutex.lock().unwrap();
-
-        // take the heap out and notify all the threads
-        heap_guard.take();
-
-        cvar.notify_all();
-
-        // drop the guard
-        drop(heap_guard);
-
-        // join all worker threads
-        for worker in &mut self.workers{
-
-            let handle = worker.thread.take().unwrap();
-
-            handle.join().expect("Failed to join worker thread");
 
         }
 
+
     }
+
+
 }
 
-/// Worker for the ConnectionScheduler.
-///
-pub struct ConnectionWorker{
-    label: usize,
+
+const FILE_CHUNK_METADATA_SIZE: usize = 2 * BYTE;
+const FILE_METADATA_PACKET_SIZE: usize = 12 * BYTE;
+
+struct SchedulerWorker{
+    stream_number: u16,
     thread: Option<JoinHandle<()>>,
 }
 
-impl ConnectionWorker{
-    /// Starts the worker thread.
-    ///
-    pub fn new(label: usize, heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>, stream: Arc<SctpStream>, packet_size: usize) -> Self{
+impl SchedulerWorker {
+    fn new(stream_number: u16,stream: Arc<SctpStream>,packet_size: usize, file_receiver: Arc<Mutex<Receiver<(PathBuf,u32)>>>) -> Self {
 
-
-        // 14 bytes coming from the leading chunk index + total chunks + chunk_size + file_size
-        let chunk_size = packet_size - PACKET_METADATA_SIZE;
-
-        let thread = thread::spawn(move||{
-
-            // get a reference to the mutex and cond var
-            let (mutex,cvar) = &*heap;
-            let stream_number = label as u16;
-
+        let thread = thread::spawn(move || {
             loop{
 
-                // acquire the mutex
-                let mut heap_guard = mutex.lock().unwrap();
+                let file = file_receiver.lock().unwrap().recv();
+                let (file_path,ppid) = match file{
+                    Ok(file_data) => file_data,
+                    Err(_) => break,
+                };
 
-                // Shut down case 1: after the pool drop is called the mutex is released and a thread might try to get a new job
-                // if the thread gets this mutex in the first instance we need to check if the heap still exits
-                if heap_guard.is_none(){
-                    break;
+                let file = OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .truncate(false)
+                    .open(&file_path)
+                    .expect(format!("Failed to open file {}",file_path.display()).as_str());
+
+                let mmap = unsafe{
+                    Mmap::map(&file).unwrap()
+                };
+
+                //Prepare the first packet metadata:
+                // chunk_index(0 for first packet) + chunk_count + file_size + client_side_file_path
+
+                let client_side_file_path = PathBuf::from("/").join(&file_path);
+                let file_path = client_side_file_path.to_string_lossy();
+                let file_bytes = file_path.as_bytes();
+
+                let chunk_index: u16 = 0;
+                let file_size = mmap.len();
+                let file_chunk_size = packet_size - FILE_CHUNK_METADATA_SIZE;
+                let chunk_count = (file_size + file_chunk_size - 1) / file_chunk_size;
+
+                let mut packet_buffer = BytePacket::new(FILE_METADATA_PACKET_SIZE + file_bytes.len());
+
+                packet_buffer.write_u16(chunk_index).unwrap();
+                packet_buffer.write_u16(chunk_count as u16).unwrap();
+                packet_buffer.write_u64(file_size as u64).unwrap();
+
+                unsafe{
+                    packet_buffer.write_buffer(file_bytes).unwrap();
                 }
 
-                // while the heap exists and is empty wait
-                while let Some(heap) = heap_guard.as_mut(){
+                stream.write_all(packet_buffer.get_buffer(),stream_number,ppid,0).unwrap();
 
-                    // if the heap is not empty then there is a new job to be processed
-                    if !heap.is_empty(){
-                        break;
+                // Prepare to send each file packet:
+                // chunk_index + file_chunk
+
+                for (chunk_index,chunk) in mmap.chunks(file_chunk_size).enumerate() {
+
+                    let mut chunk_packet = BytePacket::new(FILE_CHUNK_METADATA_SIZE + file_chunk_size);
+                    let chunk_index: u16 = chunk_index as u16 + 1;
+
+                    chunk_packet.write_u16(chunk_index).unwrap();
+                    unsafe{
+                        chunk_packet.write_buffer(chunk).unwrap();
                     }
 
-                    heap_guard = cvar.wait(heap_guard).unwrap();
-                }
-
-                // Shut down case 2: while the worker was waiting for a new job, he gets notified by the pool drop and ends the while loop as the heap is None now
-                // So, check if the heap is none to know when to stop
-                if heap_guard.is_none(){
-                    break;
-                }
-
-                // when the heap is not empty extract the job release the mutex and execute the job
-
-                println!("Worker thread labeled {label} got a new job.");
-                if let Some(Reverse(job_pair)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
-                    drop(heap_guard);
-
-                    let (job,ppid) = job_pair;
-
-
-                    let file_size = job.mmap_as_slice().len();
-                    // Ceil formula for integers
-                    let chunk_count = (file_size + chunk_size - 1) / chunk_size;
-
-                    // Iterate through each chunk and send the packets
-                    for (chunk_index,chunk) in job.mmap_as_slice().chunks(chunk_size).enumerate(){
-
-                        // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
-                        let mut chunk_packet = if chunk_index != chunk_count - 1 {
-                            BytePacket::new(packet_size)
-
-                        }
-                        else{
-                            BytePacket::new(chunk.len() + PACKET_METADATA_SIZE)
-                        };
-
-                        chunk_packet.write_u16(chunk_index as u16).unwrap();
-                        chunk_packet.write_u16(chunk_count as u16).unwrap();
-                        chunk_packet.write_u16(chunk_size as u16).unwrap();
-                        chunk_packet.write_u64(file_size as u64).unwrap();
-
-                        unsafe{
-                            chunk_packet.write_buffer(chunk).unwrap();
-                        }
-
-                        // Send the chunk
-                        match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
-                            Ok(_bytes) => (),
-                            Err(e) => println!("Write Error: {:?}",e)
-                        }
-
-                    }
-
-                    // Send a null character to mark the end of the message
-                    match stream.write_null(stream_number,ppid,0){
-                        Ok(_bytes) => (),
-                        Err(e) => println!("Write Error: {:?}",e)
-                    }
+                    stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,0).unwrap();
 
                 }
 
             }
-
-            println!("Worker thread labeled {label} shutting down.")
-
         });
 
         Self{
-            label,
+            stream_number,
             thread: Some(thread),
         }
 

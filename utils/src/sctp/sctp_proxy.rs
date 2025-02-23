@@ -276,15 +276,6 @@ impl SctpProxy{
                             }
 
 
-
-                            // let file_size = file.metadata().unwrap().len();
-                            //
-                            // // TODO mare problema aici
-                            // // Resize the file if the size exceeds the current chunk_end size
-                            // if chunk_end >= file_size as usize {
-                            //     file.set_len(chunk_end as u64).unwrap();
-                            // }
-
                             println!("Mapping file {} of chunk {} out of {}",file_path,chunk_index,expected_chunk_num);
 
                             // Map the file and write the chunk
