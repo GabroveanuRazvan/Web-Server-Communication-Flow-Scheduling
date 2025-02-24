@@ -19,6 +19,7 @@ pub mod cache{
 
 pub mod packets{
     pub mod byte_packet;
+    pub mod chunk_type;
 }
 
 pub mod libc_wrappers;
