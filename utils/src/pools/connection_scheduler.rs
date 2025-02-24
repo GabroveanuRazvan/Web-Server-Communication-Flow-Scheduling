@@ -9,6 +9,7 @@ use path_clean::PathClean;
 use crate::constants::BYTE;
 use crate::html_prefetch_service::HtmlPrefetchService;
 use crate::packets::byte_packet::BytePacket;
+use crate::packets::chunk_type::FilePacketType;
 use crate::sctp::sctp_client::SctpStream;
 
 pub struct ConnectionScheduler {
@@ -128,8 +129,8 @@ impl ConnectionScheduler {
 }
 
 
-const FILE_CHUNK_METADATA_SIZE: usize = 2 * BYTE;
-const FILE_METADATA_PACKET_SIZE: usize = 12 * BYTE;
+const FILE_CHUNK_METADATA_SIZE: usize = 3 * BYTE;
+const FILE_METADATA_PACKET_SIZE: usize = 11 * BYTE;
 
 struct SchedulerWorker{
     stream_number: u16,
@@ -142,6 +143,7 @@ impl SchedulerWorker {
         let thread = thread::spawn(move || {
             loop{
 
+                // Get a new job, or end the loop if the sender disconnected
                 let file = file_receiver.lock().unwrap().recv();
                 let (file_path,ppid) = match file{
                     Ok(file_data) => file_data,
@@ -160,21 +162,21 @@ impl SchedulerWorker {
                     Mmap::map(&file).unwrap()
                 };
 
-                //Prepare the first packet metadata:
-                // chunk_index(0 for first packet) + chunk_count + file_size + client_side_file_path
+                // Prepare the first packet metadata:
+                // packet_type + chunk_count + file_size + client_side_file_path
 
                 let client_side_file_path = PathBuf::from("/").join(&file_path);
                 let file_path = client_side_file_path.to_string_lossy();
                 let file_bytes = file_path.as_bytes();
 
-                let chunk_index: u16 = 0;
+                let packet_type = FilePacketType::Metadata;
                 let file_size = mmap.len();
                 let file_chunk_size = packet_size - FILE_CHUNK_METADATA_SIZE;
                 let chunk_count = (file_size + file_chunk_size - 1) / file_chunk_size;
 
                 let mut packet_buffer = BytePacket::new(FILE_METADATA_PACKET_SIZE + file_bytes.len());
 
-                packet_buffer.write_u16(chunk_index).unwrap();
+                packet_buffer.write_u8(u8::from(packet_type)).unwrap();
                 packet_buffer.write_u16(chunk_count as u16).unwrap();
                 packet_buffer.write_u64(file_size as u64).unwrap();
 
@@ -185,13 +187,22 @@ impl SchedulerWorker {
                 stream.write_all(packet_buffer.get_buffer(),stream_number,ppid,0).unwrap();
 
                 // Prepare to send each file packet:
-                // chunk_index + file_chunk
+                // packet_type + chunk_index + file_chunk
 
                 for (chunk_index,chunk) in mmap.chunks(file_chunk_size).enumerate() {
 
                     let mut chunk_packet = BytePacket::new(FILE_CHUNK_METADATA_SIZE + file_chunk_size);
-                    let chunk_index: u16 = chunk_index as u16 + 1;
 
+                    // Get the packet type based on the chunk index
+                    let packet_type = if chunk_index == chunk_count - 1{
+                        FilePacketType::LastChunk
+                    }else{
+                        FilePacketType::Chunk
+                    };
+
+                    let chunk_index: u16 = chunk_index as u16;
+
+                    chunk_packet.write_u8(u8::from(packet_type)).unwrap();
                     chunk_packet.write_u16(chunk_index).unwrap();
                     unsafe{
                         chunk_packet.write_buffer(chunk).unwrap();

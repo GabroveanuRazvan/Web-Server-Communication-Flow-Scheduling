@@ -55,7 +55,7 @@ impl BytePacket{
     }
 
     /// Reads a byte and advances the position by 1 step. Will return an error if the position is at the end of the buffer.
-    pub fn read(&mut self) -> Result<u8>{
+    pub fn read_u8(&mut self) -> Result<u8>{
 
         if self.position >= self.buffer_size{
             return Err("End of buffer".into());
@@ -69,8 +69,8 @@ impl BytePacket{
     /// Reads 2 bytes and advances the position by a maximum of 2 steps. Will return an error if the position reaches the end of the buffer.
     pub fn read_u16(&mut self) -> Result<u16>{
 
-        let result: u16 = ((self.read()? as u16)  << 8) |
-                          ((self.read()? as u16) << 0);
+        let result: u16 = ((self.read_u8()? as u16)  << 8) |
+                          ((self.read_u8()? as u16) << 0);
         Ok(result)
 
     }
@@ -78,10 +78,10 @@ impl BytePacket{
     /// Reads 4 bytes and advances the position by a maximum of 4 steps. Will return an error if the position reaches the end of the buffer.
     pub fn read_u32(&mut self) -> Result<u32>{
 
-        let result: u32 = ((self.read()? as u32) << 24)|
-                          ((self.read()? as u32) << 16)|
-                          ((self.read()? as u32) << 8)|
-                          ((self.read()? as u32)<< 0);
+        let result: u32 = ((self.read_u8()? as u32) << 24)|
+                          ((self.read_u8()? as u32) << 16)|
+                          ((self.read_u8()? as u32) << 8)|
+                          ((self.read_u8()? as u32)<< 0);
 
         Ok(result)
 
@@ -90,14 +90,14 @@ impl BytePacket{
     /// Reads 8 bytes and advances the position by a maximum of 8 steps. Will return an error if the position reaches the end of the buffer.
     pub fn read_u64(&mut self) -> Result<u64>{
 
-        let result: u64 = ((self.read()? as u64) << 56)|
-                          ((self.read()? as u64) << 48)|
-                          ((self.read()? as u64) << 40)|
-                          ((self.read()? as u64) << 32)|
-                          ((self.read()? as u64) << 24)|
-                          ((self.read()? as u64) << 16)|
-                          ((self.read()? as u64) << 8)|
-                          ((self.read()? as u64) << 0);
+        let result: u64 = ((self.read_u8()? as u64) << 56)|
+                          ((self.read_u8()? as u64) << 48)|
+                          ((self.read_u8()? as u64) << 40)|
+                          ((self.read_u8()? as u64) << 32)|
+                          ((self.read_u8()? as u64) << 24)|
+                          ((self.read_u8()? as u64) << 16)|
+                          ((self.read_u8()? as u64) << 8)|
+                          ((self.read_u8()? as u64) << 0);
 
         Ok(result)
 
@@ -142,7 +142,7 @@ impl BytePacket{
     }
 
     /// Writes a single byte. Will return an error if the position reaches the end of the buffer.
-    pub fn write(&mut self,value: u8) -> Result<()>{
+    pub fn write_u8(&mut self, value: u8) -> Result<()>{
 
         if self.position >= self.buffer_size{
             return Err("End of buffer".into());
@@ -158,8 +158,8 @@ impl BytePacket{
     /// Writes a maximum of 2 bytes. Will return an error if the position reaches the end of the buffer.
     pub fn write_u16(&mut self,value: u16) -> Result<()>{
 
-        self.write(((value >> 8) & 0xFF) as u8)?;
-        self.write(((value >> 0) & 0xFF) as u8)?;
+        self.write_u8(((value >> 8) & 0xFF) as u8)?;
+        self.write_u8(((value >> 0) & 0xFF) as u8)?;
 
         Ok(())
 
@@ -168,10 +168,10 @@ impl BytePacket{
     /// Writes a maximum of 4 bytes. Will return an error if the position reaches the end of the buffer.
     pub fn write_u32(&mut self,value: u32) -> Result<()>{
 
-        self.write(((value >> 24) & 0xFF) as u8)?;
-        self.write(((value >> 16) & 0xFF) as u8)?;
-        self.write(((value >> 8) & 0xFF) as u8)?;
-        self.write(((value >> 0) & 0xFF) as u8)?;
+        self.write_u8(((value >> 24) & 0xFF) as u8)?;
+        self.write_u8(((value >> 16) & 0xFF) as u8)?;
+        self.write_u8(((value >> 8) & 0xFF) as u8)?;
+        self.write_u8(((value >> 0) & 0xFF) as u8)?;
 
         Ok(())
 
@@ -180,14 +180,14 @@ impl BytePacket{
     /// Writes a maximum of 8 bytes. Will return an error if the position reaches the end of the buffer.
     pub fn write_u64(&mut self,value: u64) -> Result<()>{
 
-        self.write(((value >> 56) & 0xFF) as u8)?;
-        self.write(((value >> 48) & 0xFF) as u8)?;
-        self.write(((value >> 40) & 0xFF) as u8)?;
-        self.write(((value >> 32) & 0xFF) as u8)?;
-        self.write(((value >> 24) & 0xFF) as u8)?;
-        self.write(((value >> 16) & 0xFF) as u8)?;
-        self.write(((value >> 8) & 0xFF) as u8)?;
-        self.write(((value >> 0) & 0xFF) as u8)?;
+        self.write_u8(((value >> 56) & 0xFF) as u8)?;
+        self.write_u8(((value >> 48) & 0xFF) as u8)?;
+        self.write_u8(((value >> 40) & 0xFF) as u8)?;
+        self.write_u8(((value >> 32) & 0xFF) as u8)?;
+        self.write_u8(((value >> 24) & 0xFF) as u8)?;
+        self.write_u8(((value >> 16) & 0xFF) as u8)?;
+        self.write_u8(((value >> 8) & 0xFF) as u8)?;
+        self.write_u8(((value >> 0) & 0xFF) as u8)?;
 
         Ok(())
 
@@ -246,11 +246,11 @@ mod tests{
         let buffer = [1,2,3,4];
         let mut packet = BytePacket::from(&buffer);
 
-        assert_eq!(packet.read().unwrap(),1);
-        assert_eq!(packet.read().unwrap(),2);
-        assert_eq!(packet.read().unwrap(),3);
-        assert_eq!(packet.read().unwrap(),4);
-        assert_eq!(packet.read().unwrap_or(0),0);
+        assert_eq!(packet.read_u8().unwrap(), 1);
+        assert_eq!(packet.read_u8().unwrap(), 2);
+        assert_eq!(packet.read_u8().unwrap(), 3);
+        assert_eq!(packet.read_u8().unwrap(), 4);
+        assert_eq!(packet.read_u8().unwrap_or(0), 0);
 
     }
 
@@ -341,14 +341,14 @@ mod tests{
         let buffer = [0;4];
         let mut packet = BytePacket::from(&buffer);
 
-        packet.write(1).unwrap();
-        packet.write(2).unwrap();
-        packet.write(3).unwrap();
-        packet.write(4).unwrap();
+        packet.write_u8(1).unwrap();
+        packet.write_u8(2).unwrap();
+        packet.write_u8(3).unwrap();
+        packet.write_u8(4).unwrap();
 
         assert_eq!(packet.buffer,[1;4]);
 
-        packet.write(5).unwrap();
+        packet.write_u8(5).unwrap();
 
     }
 
