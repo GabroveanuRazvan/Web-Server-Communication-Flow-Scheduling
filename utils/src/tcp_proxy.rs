@@ -80,11 +80,24 @@ impl TcpProxy{
                     let new_line_position = buffer.iter().position(|&b| b == b'\n').unwrap();
                     let request_line = String::from_utf8_lossy(&buffer[..new_line_position]).to_string();
 
+                    println!("Request: {}", request_line);
+
                     // Get the server-side file name, the cache side file name and path
                     let file_name = extract_uri(request_line).unwrap();
+
+                    let file_name = match file_name.trim() {
+                        "/" => "/index.html".to_string(),
+                        _ => {
+                            // Remove query operator ? in path
+                            file_name.trim_end_matches("?").to_string()
+                        }
+                    };
+
                     let cache_file_name = encode_path(&file_name);
                     let cache_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
                     let file_path_request = format!("{}\n",file_name);
+
+                    println!("Request: {}", file_path_request);
 
                     // If the requested file does not exist in the cache, send a request to the SCTP proxy, and wait for the file to be downloaded
                     if !cache_file_path.exists(){
@@ -176,8 +189,8 @@ impl TcpProxy{
                         // Retrieve the transmitter and send a signal
                         let download_map = DOWNLOADING_FILES.read().unwrap();
 
-                        if let Some(sender) = download_map.get(&PathBuf::from(file_name)){
-                            sender.send(true).unwrap();
+                        if let Some(sender) = download_map.get(&PathBuf::from(&file_name)){
+                            sender.send(true).expect(format!("Error while sending file: {}", file_name).as_str());
                         }
 
 

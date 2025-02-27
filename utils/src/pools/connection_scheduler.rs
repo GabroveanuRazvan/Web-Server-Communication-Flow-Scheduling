@@ -83,6 +83,7 @@ impl ConnectionScheduler {
 
                 Ok(0) => {
                     println!("Connection closed");
+                    break;
                 }
 
                 Err(e) => {
@@ -184,14 +185,16 @@ impl SchedulerWorker {
                     packet_buffer.write_buffer(file_bytes).unwrap();
                 }
 
+                println!("Sending metadata...");
+
                 stream.write_all(packet_buffer.get_buffer(),stream_number,ppid,0).unwrap();
 
                 // Prepare to send each file packet:
                 // packet_type + chunk_index + file_chunk
-
+                println!("Sending chunks...");
                 for (chunk_index,chunk) in mmap.chunks(file_chunk_size).enumerate() {
 
-                    let mut chunk_packet = BytePacket::new(FILE_CHUNK_METADATA_SIZE + file_chunk_size);
+                    let mut chunk_packet = BytePacket::new(packet_size);
 
                     // Get the packet type based on the chunk index
                     let packet_type = if chunk_index == chunk_count - 1{

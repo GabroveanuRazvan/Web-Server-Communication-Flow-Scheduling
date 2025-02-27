@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::{fs, thread};
 use memmap2::{Mmap, MmapMut};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -10,12 +10,66 @@ use path_clean::PathClean;
 use utils::html_prefetch_service::HtmlPrefetchService;
 use utils::http_parsers::extract_http_paths;
 use std::num::Wrapping;
-
-
+use std::time::Duration;
 
 fn main() {
 
-    let mut p = 0u32;
+    // let th1 = thread::spawn(|| {
+    //     let file = OpenOptions::new()
+    //         .read(true)
+    //         .open("./test2.txt").unwrap();
+    //
+    //     println!("{:#?}", file.metadata().unwrap().len());
+    //
+    //     let mmap = unsafe{Mmap::map(&file).unwrap()};
+    //     println!("{:#?}", mmap.len());
+    // });
+
+    let th1 = thread::spawn(move || {
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open("./test2.txt").unwrap();
+
+        println!("{:#?}", file.metadata().unwrap().len());
+
+        let mut mmap = unsafe{MmapMut::map_mut(&file).unwrap()};
+        println!("{:#?}", mmap.len());
+
+        thread::sleep(Duration::from_secs(5));
+
+    });
+
+    let th2  = thread::spawn(|| {
+
+        thread::sleep(Duration::from_secs(1));
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("./test2.txt").unwrap();
+
+        println!("{:#?}", file.metadata().unwrap().len());
+
+        let mut mmap = unsafe{MmapMut::map_mut(&file).unwrap()};
+        println!("{:#?}", mmap.len());
+
+        fs::rename("./test2.txt","./test2.txt.dat").unwrap();
+
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("./test2.txt.dat").unwrap();
+
+        println!("{:#?}", file.metadata().unwrap().len());
+
+    });
+
+    // th1.join().unwrap();
+    th2.join().unwrap();
+
+
 
 
 }

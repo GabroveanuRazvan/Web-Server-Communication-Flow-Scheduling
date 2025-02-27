@@ -1,6 +1,7 @@
+use std::fmt::{Display, Formatter};
+use std::fmt;
 
 /// Enum for defining the type of each packet for the file transfer protocol.
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FilePacketType {
 
@@ -41,6 +42,19 @@ impl From<FilePacketType> for u8{
     }
 
 }
+
+impl Display for FilePacketType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            FilePacketType::Unknown(code) => write!(f, "Unknown({})", code),
+            FilePacketType::Metadata => write!(f, "Metadata"),
+            FilePacketType::Chunk => write!(f, "Chunk"),
+            FilePacketType::LastChunk => write!(f, "LastChunk"),
+        }
+    }
+}
+
+
 
 #[cfg(test)]
 
