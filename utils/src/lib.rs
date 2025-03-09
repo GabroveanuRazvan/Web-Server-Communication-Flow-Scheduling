@@ -8,7 +8,6 @@ pub mod sctp{
 pub mod pools{
     pub mod shortest_job_first_pool;
     pub mod connection_scheduler;
-    pub mod connection_scheduler_old;
     pub mod thread_pool;
 }
 
