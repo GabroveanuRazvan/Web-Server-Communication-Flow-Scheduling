@@ -9,6 +9,7 @@ pub mod pools{
     pub mod shortest_job_first_pool;
     pub mod connection_scheduler;
     pub mod thread_pool;
+    pub mod indexed_thread_pool;
 }
 
 pub mod cache{

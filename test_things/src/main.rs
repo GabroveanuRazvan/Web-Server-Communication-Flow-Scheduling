@@ -11,8 +11,16 @@ use utils::html_prefetch_service::HtmlPrefetchService;
 use utils::http_parsers::extract_http_paths;
 use std::num::Wrapping;
 use std::time::Duration;
+use utils::pools::indexed_thread_pool::IndexedTreadPool;
 
 fn main() {
 
+    let pool = IndexedTreadPool::new(3);
+
+    for i in 0..3{
+        pool.execute(i,move || {
+            println!("Job received {}",i);
+        });
+    }
 
 }
