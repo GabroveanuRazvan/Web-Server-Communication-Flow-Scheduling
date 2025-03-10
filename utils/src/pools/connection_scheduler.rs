@@ -243,12 +243,6 @@ impl ConnectionWorker{
 
                         }
 
-                        // Send a null character to mark the end of the message
-                        match stream.write_null(stream_number,ppid,0){
-                            Ok(_bytes) => (),
-                            Err(e) => println!("Write Error: {:?}",e)
-                        }
-
                     }
 
                 }

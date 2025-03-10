@@ -3,9 +3,10 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
@@ -19,6 +20,8 @@ use crate::packets::chunk_type::FilePacketType;
 use crate::pools::thread_pool::ThreadPool;
 use crate::packets::file_packet_error::FilePacketError;
 use std::result::Result as StdResult;
+use crate::packets::chunk_type::FilePacketType::LastChunk;
+use crate::pools::indexed_thread_pool::IndexedTreadPool;
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
 const CACHE_CAPACITY: usize = 100 * MEGABYTE;
@@ -31,8 +34,8 @@ const DOWNLOAD_SUFFIX: &str = ".tmp";
 ///Maps each payload protocol id to the requested file name (not encoded).
 static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Maps each payload protocol id to the current number of chunks that need to be processed.
-static PROCESSED_CHUNKS_COUNT: LazyLock<Mutex<HashMap<u32,u16>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Maps each payload protocol id to its corresponding opened file when the file is being downloaded
+static FILE_MAP: LazyLock<RwLock<HashMap<u32,Mutex<Option<BufWriter<File>>>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
 
 /// Abstraction for a tcp to sctp proxy
@@ -138,12 +141,28 @@ impl SctpProxy{
 
                 let path = String::from_utf8_lossy(&request_buffer);
 
-                let path = match path.trim() {
+                let file_path = match path.trim() {
                     "/" => "/index.html".to_string(),
                     _ => {
                         path.to_string()
                     }
                 };
+
+
+                let cache_file_name = encode_path(&file_path) + DOWNLOAD_SUFFIX;
+                let cache_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
+
+                // Insert an entry into the ppid map and processed chunks
+                PPID_MAP.write().unwrap().insert(current_ppid,file_path.to_string());
+
+                let file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .read(true)
+                    .open(cache_file_path)?;
+
+                // Insert the opened file into its map
+                FILE_MAP.write().unwrap().insert(current_ppid,Mutex::new(Some(BufWriter::new(file))));
 
                 // Send the request to the server
                 sctp_client.write_all(&request_buffer,stream_number,current_ppid,0)?;
@@ -173,7 +192,7 @@ impl SctpProxy{
 
             // init a new thread pool that will download the files
             let mut sender_info = new_sctp_sndrinfo();
-            let mut download_pool = ThreadPool::new(DOWNLOAD_THREADS);
+            let mut download_pool = IndexedTreadPool::new(DOWNLOAD_THREADS);
 
             loop{
 
@@ -189,26 +208,14 @@ impl SctpProxy{
                     }
 
                     Ok(bytes_read) => {
-                        
 
                         let ppid = sender_info.sinfo_ppid as u32;
-                        let mut byte_packet = BytePacket::from(&buffer[..bytes_read]);
+                        let stream_number = sender_info.sinfo_stream as u16;
 
-                        // Send the packet to the thread pool only if it is not of metadata type
-                        let metadata_result = Self::parse_metadata_packet(&mut byte_packet,ppid);
-                        match metadata_result {
-                            Err(FilePacketError::NotMetadata) => (),
-                            _ => continue,
-                        }
-
-                        download_pool.execute(move || {
-
-                            let chunk_packet_result = Self::parse_chunk_packet(&mut byte_packet,ppid);
-                            match chunk_packet_result{
-                                Err(FilePacketError::InvalidPacketType(packet_type)) => panic!("Invalid packet type: {}", packet_type),
-                                _ => ()
-                            }
-
+                        // Send the packet to be downloaded by the designated thread
+                        download_pool.execute(stream_number as usize,move || {
+                            let mut byte_packet = BytePacket::from(&buffer[..bytes_read]);
+                            Self::parse_chunk_packet(&mut byte_packet,ppid);
                         })
 
                     }
@@ -222,116 +229,37 @@ impl SctpProxy{
 
     }
 
-    /// Checks if the current byte packet is a first metadata packet of a new file to be downloaded.
-    /// When the packet is just a chunk packet, the function returns and resets the byte packet offset.
-    fn parse_metadata_packet(byte_packet: &mut BytePacket,ppid: u32)-> StdResult<(),FilePacketError>{
-
-        // Parse the packet type and end the function if it is not of metadata type
-        let packet_type = FilePacketType::from(byte_packet.read_u8().unwrap());
-        match packet_type {
-            FilePacketType::Metadata => (),
-            _ => {
-                byte_packet.seek(0);
-                return Err(FilePacketError::NotMetadata);
-            }
-        }
-
-        let chunk_count = byte_packet.read_u16().unwrap();
-        let file_size = byte_packet.read_u64().unwrap();
-        let file_path_bytes = byte_packet.read_all().unwrap();
-        let file_path = String::from_utf8_lossy(&file_path_bytes);
-
-        let mut cache_file_name = encode_path(&file_path);
-        let downloaded_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
-
-        cache_file_name += DOWNLOAD_SUFFIX;
-        let cache_file_path = PathBuf::from(CACHE_PATH).join(cache_file_name);
-
-        // Return an error if the file already exists on the cache
-        if downloaded_file_path.exists() || cache_file_path.exists(){
-            return Err(FilePacketError::FileExists(downloaded_file_path));
-        }
-
-        // Create the file and set its length
-        let file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .read(true)
-            .open(&cache_file_path)
-            .expect(&format!("Failed to create cache file {}",cache_file_path.to_string_lossy()));
-
-        file.set_len(file_size).expect("Could not set cache file size");
-
-        // Insert an entry into the ppid map and processed chunks
-        PPID_MAP.write().unwrap().insert(ppid,file_path.to_string());
-        PROCESSED_CHUNKS_COUNT.lock().unwrap().insert(ppid,chunk_count);
-
-        Ok(())
-    }
-
-    fn parse_chunk_packet(byte_packet: &mut BytePacket,ppid: u32) -> StdResult<(),FilePacketError> {
+    /// Parses the received file chunk bytes.
+    fn parse_chunk_packet(byte_packet: &mut BytePacket,ppid: u32){
 
         // Extract the packet data
-        let packet_type = FilePacketType::from(byte_packet.read_u8().unwrap());
         let chunk_index = byte_packet.read_u16().unwrap();
+        let total_chunks = byte_packet.read_u16().unwrap();
         let file_chunk = byte_packet.read_all().unwrap();
-        let chunk_size = file_chunk.len();
 
-        // Get the cache file path of the file, open and map it into memory
-        let mut cache_file_name = {
-            let ppid_map = PPID_MAP.read().unwrap();
+        // Get the file out of the file map
+        let file_map = FILE_MAP.read().unwrap();
+        let mut file_ref = file_map.get(&ppid).unwrap().lock().unwrap();
+        let file = file_ref.as_mut().unwrap();
 
-            let file_name = match ppid_map.get(&ppid){
-                Some(file) => file,
-                None => Err(FilePacketError::FileNotRegistered)?,
-            };
+        // Write the chunk
+        file.write_all(file_chunk).unwrap();
 
-            encode_path(file_name)
-        };
+        // File ended to download
+        if chunk_index == total_chunks -1{
+            // Flush the contents of the buffer into the file, drop the buffer and the active mutexes
+            file.flush().unwrap();
+            file_ref.take();
+            drop(file_ref);
+            drop(file_map);
 
-        cache_file_name += DOWNLOAD_SUFFIX;
-        let cache_file_path = Path::new(CACHE_PATH).join(cache_file_name);
+            //Rename the file by deleting the download suffix to mark it as finished
+            let cache_file_name = PathBuf::from(&Self::get_file_path(ppid));
+            let new_file_name = cache_file_name.with_extension("");
 
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .create(false)
-            .open(&cache_file_path)
-            .expect("Could not open cache file");
-
-        let mut mmap = unsafe{MmapMut::map_mut(&file).expect("Could not map file")};
-
-        // Compute the start file index based on the type of packet
-        let chunk_begin = match packet_type{
-            FilePacketType::Chunk => chunk_index as usize * chunk_size,
-            FilePacketType::LastChunk => file.metadata().unwrap().len() as usize - chunk_size,
-            _ => return Err(FilePacketError::InvalidPacketType(packet_type)),
-        };
-
-        let chunk_end = chunk_begin + chunk_size;
-
-        mmap[chunk_begin..chunk_end].copy_from_slice(&file_chunk);
-
-        // Decrement the processed chunks number
-        let mut processed_chunks = PROCESSED_CHUNKS_COUNT.lock().unwrap();
-        let remaining_chunks = *processed_chunks.entry(ppid).and_modify(|count| *count -= 1).or_insert(0);
-
-
-        // Rename the file if it is done downloading
-        if remaining_chunks == 0{
-            mmap.flush().expect("Could not flush file");
-            drop(mmap);
-            drop(file);
-
-            let cache_file_stem = PathBuf::from(cache_file_path.file_stem().unwrap());
-            let new_file_path = PathBuf::from(CACHE_PATH).join(cache_file_stem);
-
-            fs::rename(cache_file_path, new_file_path).expect("Unable to rename file");
+            fs::rename(cache_file_name, new_file_name).unwrap();
 
         }
-
-        Ok(())
 
     }
 

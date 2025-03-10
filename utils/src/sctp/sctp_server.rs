@@ -10,6 +10,8 @@ use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
 use crate::constants::{KILOBYTE};
+use crate::pools::connection_scheduler::ConnectionScheduler;
+
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
 const FILE_PACKET_SIZE: usize = 64 * KILOBYTE;
 const THREAD_POOL_SIZE: usize = 6;
@@ -107,8 +109,9 @@ impl SctpServer{
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        let num_cpus = thread::available_parallelism()?.get();
-        let mut scheduler = connection_scheduler::ConnectionScheduler::new(num_cpus,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
+        // let num_cpus = thread::available_parallelism()?.get();
+        let num_cpus = 6;
+        let mut scheduler = ConnectionScheduler::new(num_cpus,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
 
         scheduler.start();
 
