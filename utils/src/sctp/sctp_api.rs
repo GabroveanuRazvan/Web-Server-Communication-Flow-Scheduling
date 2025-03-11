@@ -1,12 +1,11 @@
 extern crate libc;
 
-use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM, SOCK_DGRAM};
-
-use std::{ptr, slice};
+use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM, SOCK_DGRAM, SCTP_INITMSG};
+use std::{fmt, mem, ptr, slice};
 use std::io::{Result};
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr};
 use std::os::fd::RawFd;
-use crate::sctp::sctp_server::SctpServer;
+use crate::libc_wrappers::{safe_setsockopt, SockAddrStorage};
 use super::super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
 
 /// Macros used in sctp_bindx function
@@ -21,12 +20,93 @@ pub trait SctpPeerBuilder{
     fn addresses(self,addresses: Vec<Ipv4Addr>) -> Self;
     fn port(self,port: u16) -> Self;
     fn events(self, events: SctpEventSubscribe) -> Self;
-
+    fn set_outgoing_streams(self, out_stream_count: u16) ->Self;
+    fn set_incoming_streams(self, in_stream_count: u16) ->Self;
 }
 
 
-/// Custom structs
+/// Custom structs ///
 
+
+#[repr(C,packed(4))]
+#[derive(Copy, Clone)]
+pub struct SctpPeerAddrInfo{
+    pub spinfo_assoc_id: i32,
+    pub sockaddr_storage: SockAddrStorage,
+    pub spinfo_state: i32,
+    pub spinfo_cwnd: u32,
+    pub spinfo_srtt: u32,
+    pub spinfo_rto: u32,
+    pub spinfo_mtu: u32,
+}
+
+impl SctpPeerAddrInfo{
+    pub fn new() -> Self{
+        unsafe{mem::zeroed()}
+    }
+}
+
+#[repr(C,packed(4))]
+#[derive(Copy, Clone)]
+pub struct SctpStatus{
+    pub sstat_assoc_id: i32,
+    pub sstat_state: i32,
+    pub sstat_rwnd: u32,
+    pub sstat_unackdata: u16,
+    pub sstat_penddata: u16,
+    pub sstat_instrms: u16,
+    pub sstat_outstrms: u16,
+    pub sstat_fragmentation_point: u32,
+    pub sstat_primary: SctpPeerAddrInfo,
+}
+impl fmt::Debug for SctpStatus{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        write!(f, "SctpStatus{{InStreams: {}, OutStreams: {}}}", self.sstat_instrms, self.sstat_outstrms)
+
+    }
+}
+impl SctpStatus{
+    pub fn new() -> Self{
+        unsafe{mem::zeroed()}
+    }
+
+    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+
+        unsafe{
+            slice::from_raw_parts_mut(
+                self as *mut SctpStatus as *mut u8,
+                mem::size_of::<SctpStatus>()
+            )
+        }
+
+    }
+
+}
+
+#[repr(C)]
+#[derive(Copy, Clone,Default,Debug)]
+pub struct SctpInitMsg{
+    pub sinit_num_ostreams: u16,
+    pub sinit_max_instreams: u16,
+    pub sinit_max_attempts: u16,
+    pub sinit_max_init_timeo: u16,
+}
+
+impl SctpInitMsg{
+    pub fn new() -> Self{
+        unsafe{mem::zeroed()}
+    }
+
+    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
+        unsafe{
+            slice::from_raw_parts_mut(
+                self as *mut SctpInitMsg as *mut u8,
+                mem::size_of::<SctpInitMsg>()
+            )
+        }
+    }
+}
 
 
 /// Same SctpEventSubscribe as in the C API

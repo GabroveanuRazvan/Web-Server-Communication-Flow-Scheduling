@@ -20,11 +20,14 @@ fn main() -> Result<()> {
         .max_connections(MAX_CONNECTIONS)
         .events(events)
         .path(Path::new(PATH_STR))
+        .set_outgoing_streams(20)
+        .set_incoming_streams(12)
         .build();
 
     server.bind()
           .listen()
-          .options();
+          .set_events();
+
 
     println!("Server started and listening on {IPV4:?}:{PORT}");
     println!("Current directory: {PATH_STR}");
@@ -33,7 +36,6 @@ fn main() -> Result<()> {
     for stream in server.incoming(){
 
         let stream = stream?;
-
         SctpServer::handle_client(stream)?
 
     }

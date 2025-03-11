@@ -1,7 +1,7 @@
 use std::ffi::CString;
 use std::fmt::{Debug, Formatter};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink, sctp_initmsg, sockaddr_storage};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr};
@@ -11,6 +11,7 @@ use std::os::fd::RawFd;
 
 pub type SockAddrIn = sockaddr_in;
 pub type SctpSenderInfo = sctp_sndrcvinfo;
+pub type SockAddrStorage = sockaddr_storage;
 
 /// FFI bindings for functions that the libc crate does not provide
 extern "C"{
@@ -29,8 +30,7 @@ pub fn safe_listen(socket_fd: RawFd,max_queue_size: i32) -> Result<i32> {
 }
 
 /// Wrapper for accept, returns Ok(0) or Err(io::Error) on failure
-pub fn safe_accept(socket_fd: RawFd, address: Option<&mut SockAddrIn>, address_size: Option<&mut usize>) -> Result<i32>{
-
+pub fn safe_accept(socket_fd: RawFd, address: Option<&mut SockAddrIn>, address_size: Option<&mut usize>) -> Result<RawFd>{
 
     let addr_ptr = get_ptr_from_mut_ref(address);
     let addr_size_ptr = get_ptr_from_mut_ref(address_size);

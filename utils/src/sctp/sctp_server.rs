@@ -4,10 +4,10 @@ use std::net::Ipv4Addr;
 use std::os::fd::RawFd;
 use std::path::Path;
 use std::thread;
-use libc::{IPPROTO_SCTP, SCTP_EVENTS};
+use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
 use crate::pools::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
-use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut};
+use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut, SctpInitMsg, SctpStatus};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
 use crate::constants::{KILOBYTE};
 use crate::pools::connection_scheduler::ConnectionScheduler;
@@ -76,7 +76,8 @@ impl SctpServer{
 
     }
 
-    pub fn options(&self) ->&Self{
+    /// Activates the server events
+    pub fn set_events(&self) ->&Self{
 
         let events_ref = events_to_u8(&self.active_events);
 
@@ -87,7 +88,7 @@ impl SctpServer{
         self
     }
 
-    pub fn get_options(&self) -> SctpEventSubscribe{
+    pub fn get_events(&self) -> SctpEventSubscribe{
         let mut events = SctpEventSubscribe::new();
 
         if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
@@ -109,8 +110,8 @@ impl SctpServer{
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        // let num_cpus = thread::available_parallelism()?.get();
-        let num_cpus = 6;
+        let num_cpus = thread::available_parallelism()?.get();
+        // let num_cpus = 6;
         let mut scheduler = ConnectionScheduler::new(num_cpus,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
 
         scheduler.start();
@@ -167,6 +168,8 @@ pub struct SctpServerBuilder{
     port: u16,
     max_connections: u16,
     active_events: SctpEventSubscribe,
+    outgoing_stream_count: u16,
+    incoming_stream_count: u16,
 }
 
 impl SctpServerBuilder{
@@ -188,6 +191,14 @@ impl SctpServerBuilder{
     }
     /// Builds the server based on the given information
     pub fn build(self) -> SctpServer{
+
+        let mut sctp_init = SctpInitMsg::new();
+        sctp_init.sinit_num_ostreams = self.outgoing_stream_count;
+        sctp_init.sinit_max_instreams = self.incoming_stream_count;
+
+        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_INITMSG,sctp_init.as_mut_bytes()){
+            panic!("SCTP setsockopt error: {error}");
+        }
 
         SctpServer{
             sock_fd: self.sock_fd,
@@ -211,6 +222,8 @@ impl SctpPeerBuilder for SctpServerBuilder {
             port: 8080,
             max_connections: 0,
             active_events: SctpEventSubscribe::new(),
+            outgoing_stream_count: 10,
+            incoming_stream_count: 10,
         }
     }
 
@@ -252,6 +265,20 @@ impl SctpPeerBuilder for SctpServerBuilder {
     fn events(mut self , events: SctpEventSubscribe) -> Self{
 
         self.active_events = events;
+        self
+    }
+
+    /// Sets the maximum number of outgoing streams
+    fn set_outgoing_streams(mut self, out_stream_count: u16) ->Self{
+
+        self.outgoing_stream_count = out_stream_count;
+        self
+    }
+
+    /// Sets the maximum number of incoming streams
+    fn set_incoming_streams(mut self, in_stream_count: u16) ->Self{
+
+        self.incoming_stream_count = in_stream_count;
         self
     }
 

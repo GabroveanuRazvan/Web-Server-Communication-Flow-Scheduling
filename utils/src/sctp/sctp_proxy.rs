@@ -27,7 +27,7 @@ const BUFFER_SIZE: usize = 64 * KILOBYTE;
 const CACHE_CAPACITY: usize = 100 * MEGABYTE;
 const CHUNK_SIZE: usize = 64 * KILOBYTE;
 
-const DOWNLOAD_THREADS: usize = 6;
+const DOWNLOAD_THREADS: usize = 12;
 const CACHE_PATH: &str = "/tmp/tmpfs";
 const DOWNLOAD_SUFFIX: &str = ".tmp";
 
@@ -70,11 +70,14 @@ impl SctpProxy{
             .addresses(self.sctp_peer_addresses.clone())
             .ttl(0)
             .events(events)
+            .set_outgoing_streams(3)
+            .set_incoming_streams(4)
             .build();
 
         sctp_client.connect();
-        sctp_client.options();
+        sctp_client.events();
 
+        println!("{:?}",sctp_client.get_sctp_status());
 
         // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();

@@ -1,8 +1,8 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS};
+use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
 use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
-use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpPeerBuilder};
+use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpStatus};
 use io::Result;
 use std::os::fd::RawFd;
 
@@ -33,11 +33,11 @@ impl SctpStream{
 
     pub fn connect(&mut self) -> &Self{
 
-        // crate a new socket
-        match safe_sctp_socket(){
-            Ok(sock_fd) => self.sock_fd = sock_fd,
-            Err(error)=> panic!("Sctp stream socket error: {}",error),
-        }
+        // // crate a new socket
+        // match safe_sctp_socket(){
+        //     Ok(sock_fd) => self.sock_fd = sock_fd,
+        //     Err(error)=> panic!("Sctp stream socket error: {}",error),
+        // }
 
         // check if we have any addresses to connect to
         let peer_addresses = match self.peer_addresses{
@@ -165,7 +165,7 @@ impl SctpStream{
 
     /// Method used to activate the event options of the client
     /// !!! Should always be called AFTER connect call
-    pub fn options(&self) ->&Self{
+    pub fn events(&self) ->&Self{
 
         let events_ref = match &self.active_events {
             Some(events) => events_to_u8(events),
@@ -180,7 +180,7 @@ impl SctpStream{
     }
 
     /// Method used to get the active events of the client
-    pub fn get_options(&self) -> SctpEventSubscribe{
+    pub fn get_events(&self) -> SctpEventSubscribe{
         let mut events = SctpEventSubscribe::new();
 
         if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
@@ -188,6 +188,16 @@ impl SctpStream{
         }
 
         events
+    }
+
+    pub fn get_sctp_status(&self) -> SctpStatus{
+        let mut sctp_status = SctpStatus::new();
+
+        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_STATUS,sctp_status.as_mut_bytes()){
+            panic!("SCTP getsockopt error: {error}");
+        }
+
+        sctp_status
     }
 
     /// Tries to clone the current stream by creating a new file descriptor for the current socket.
@@ -232,6 +242,10 @@ pub struct SctpStreamBuilder{
     peer_addresses: Option<Vec<Ipv4Addr>>,
     // if the stream is created by accept this will be None
     active_events: Option<SctpEventSubscribe>,
+
+    outgoing_stream_count: u16,
+    incoming_stream_count: u16,
+
     ttl: u32,
 }
 
@@ -245,6 +259,14 @@ impl SctpStreamBuilder{
 
     /// Builds the client based on the given information
     pub fn build(self) -> SctpStream{
+
+        let mut sctp_init = SctpInitMsg::new();
+        sctp_init.sinit_num_ostreams = self.outgoing_stream_count;
+        sctp_init.sinit_max_instreams = self.incoming_stream_count;
+
+        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_INITMSG,sctp_init.as_mut_bytes()){
+            panic!("SCTP setsockopt error: {error}");
+        }
 
         SctpStream{
             sock_fd: self.sock_fd,
@@ -266,6 +288,8 @@ impl SctpPeerBuilder for SctpStreamBuilder {
             address: SocketAddrV4::new(Ipv4Addr::new(0,0,0,0),0),
             peer_addresses: None,
             active_events: None,
+            incoming_stream_count: 10,
+            outgoing_stream_count: 10,
             ttl: 0,
         }
     }
@@ -308,6 +332,20 @@ impl SctpPeerBuilder for SctpStreamBuilder {
     fn events(mut self, events: SctpEventSubscribe) -> Self{
 
         self.active_events = Some(events);
+        self
+    }
+
+    /// Sets the maximum number of outgoing streams
+    fn set_outgoing_streams(mut self, out_stream_count: u16) ->Self{
+
+        self.outgoing_stream_count = out_stream_count;
+        self
+    }
+
+    /// Sets the maximum number of incoming streams
+    fn set_incoming_streams(mut self, in_stream_count: u16) ->Self{
+
+        self.incoming_stream_count = in_stream_count;
         self
     }
 

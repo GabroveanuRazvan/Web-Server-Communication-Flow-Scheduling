@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::{fs, thread};
+use std::{fs, mem, slice, thread};
 use std::cell::RefCell;
 use memmap2::{Mmap, MmapMut};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, RwLock};
@@ -12,38 +13,37 @@ use utils::html_prefetch_service::HtmlPrefetchService;
 use utils::http_parsers::extract_http_paths;
 use std::num::Wrapping;
 use std::time::Duration;
+use libc::{listen, setsockopt, IPPROTO_SCTP, SCTP_INITMSG, SCTP_STATUS};
+use utils::libc_wrappers::{safe_accept, safe_getsockopt, safe_listen, safe_setsockopt, sock_addr_to_c};
 use utils::pools::indexed_thread_pool::IndexedTreadPool;
+use utils::sctp::sctp_api::{safe_sctp_bindx, safe_sctp_connectx, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerAddrInfo, SctpStatus, SCTP_BINDX_ADD_ADDR};
 
 fn main(){
 
+    let sockfd = safe_sctp_socket().unwrap();
 
-    let mut map: RwLock<HashMap<i32,RefCell<Option<File>>>> = RwLock::new(HashMap::new());
+    let sockaddr =SocketAddrV4::new(Ipv4Addr::new(127,0,0,1), 9898);
+    let sockaddr = sock_addr_to_c(&sockaddr);
 
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("random.txt").unwrap();
+    let mut sctp_init: SctpInitMsg = SctpInitMsg::new();
+    sctp_init.sinit_num_ostreams = 20;
+    sctp_init.sinit_max_instreams = 9;
 
-    let mut map_lock = map.write().unwrap();
-    map_lock.insert(1,RefCell::new(Some(file)));
-    drop(map_lock);
+    safe_setsockopt(sockfd,IPPROTO_SCTP,SCTP_INITMSG,sctp_init.as_mut_bytes()).unwrap();
 
-    let map = map.read().unwrap();
 
-    let mut file_ref = map.get(&1).unwrap().borrow_mut();
-    let file = file_ref.as_mut().unwrap();
+     safe_sctp_connectx(sockfd,&mut [sockaddr]).unwrap();
 
-    file.write_all(b"Hello, world!").unwrap();
 
-    file_ref.take();
 
-    println!("{:?}",file_ref);
+    let mut status: SctpStatus = SctpStatus::new();
+    safe_getsockopt(sockfd,IPPROTO_SCTP,SCTP_STATUS,status.as_mut_bytes()).unwrap();
 
-    let path = PathBuf::from("/tmp/tmpfs/ceva.txt.tmp");
-    let mut path = path.with_extension("");
-    println!("{:?}",path);
-    path.set_extension(".tmp");
-    println!("{:?}",path);
+    println!("{} {}",status.sstat_instrms,status.sstat_outstrms);
 
+
+
+
+    println!("{}",mem::size_of::<SctpInitMsg>());
 
 }
