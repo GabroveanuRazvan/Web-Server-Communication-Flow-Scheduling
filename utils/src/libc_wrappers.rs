@@ -23,11 +23,22 @@ pub trait CStruct{
         }
     }
 
+    fn as_bytes(&self) -> &[u8] where Self: Sized{
+        unsafe{
+            slice::from_raw_parts(
+                self as *const Self as *const u8,
+                mem::size_of::<Self>()
+            )
+
+        }
+    }
+
 }
 
-/// Aliases and structures that are not in libc
+/// ///////////////////////////////////////
+/// Aliases and C structures redefines ///
+/// /////////////////////////////////////
 pub type SockAddrStorage = sockaddr_storage;
-
 
 #[repr(C)]
 #[derive(Copy, Clone,Default,Debug)]

@@ -2,7 +2,7 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
 use crate::libc_wrappers::{safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, CStruct, SockAddrIn};
-use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpSenderReceiveInfo, SctpStatus};
+use crate::sctp::sctp_api::{safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpSenderReceiveInfo, SctpStatus};
 use io::Result;
 use std::os::fd::RawFd;
 
@@ -167,7 +167,7 @@ impl SctpStream{
     pub fn events(&self) ->&Self{
 
         let events_ref = match &self.active_events {
-            Some(events) => events_to_u8(events),
+            Some(events) => events.as_bytes(),
             None => panic!("No events were specified"),
         };
 
@@ -182,7 +182,7 @@ impl SctpStream{
     pub fn get_events(&self) -> SctpEventSubscribe{
         let mut events = SctpEventSubscribe::new();
 
-        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
+        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events.as_mut_bytes()){
             panic!("SCTP getsockopt error: {error}");
         }
 

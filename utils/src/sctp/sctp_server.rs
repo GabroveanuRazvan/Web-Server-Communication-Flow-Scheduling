@@ -7,7 +7,7 @@ use std::thread;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
 use crate::pools::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
-use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut, SctpInitMsg, SctpStatus};
+use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, SctpPeerBuilder, SctpInitMsg};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, c_to_sock_addr, safe_getsockopt, safe_close, CStruct};
 use crate::constants::{KILOBYTE};
 use crate::pools::connection_scheduler::ConnectionScheduler;
@@ -79,9 +79,7 @@ impl SctpServer{
     /// Activates the server events
     pub fn set_events(&self) ->&Self{
 
-        let events_ref = events_to_u8(&self.active_events);
-
-        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_ref){
+        if let Err(error) = safe_setsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,self.active_events.as_bytes()){
             panic!("SCTP setsockopt error: {error}");
         }
 
@@ -91,7 +89,7 @@ impl SctpServer{
     pub fn get_events(&self) -> SctpEventSubscribe{
         let mut events = SctpEventSubscribe::new();
 
-        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events_to_u8_mut(&mut events)){
+        if let Err(error) = safe_getsockopt(self.sock_fd,IPPROTO_SCTP,SCTP_EVENTS,events.as_mut_bytes()){
             panic!("SCTP getsockopt error: {error}");
         }
 

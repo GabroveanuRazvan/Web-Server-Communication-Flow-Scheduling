@@ -1,18 +1,25 @@
 extern crate libc;
-
-use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, SOCK_SEQPACKET, IPPROTO_SCTP, SOCK_STREAM, SOCK_DGRAM, SCTP_INITMSG};
-use std::{fmt, mem, ptr, slice};
+use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, IPPROTO_SCTP, SOCK_STREAM};
+use std::{fmt, ptr, slice};
 use std::io::{Result};
 use std::net::{Ipv4Addr};
 use std::os::fd::RawFd;
 use crate::libc_wrappers::{safe_setsockopt, CStruct, SockAddrStorage};
 use super::super::libc_wrappers::{wrap_result_nonnegative, SockAddrIn};
 
-/// Macros used in sctp_bindx function
+/// ///////////
+/// Macros ///
+/// /////////
+
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
 pub const SCTP_BINDX_REM_ADDR: c_int = 2;
 pub const MAX_STREAM_NUMBER: u16 = 10;
 
+/// /////////////////////////
+/// Structures and traits ///
+/// ////////////////////////
+
+/// Builder pattern for sctp clients/servers
 pub trait SctpPeerBuilder{
     fn new() -> Self;
     fn socket(self) -> Self;
@@ -23,10 +30,6 @@ pub trait SctpPeerBuilder{
     fn set_outgoing_streams(self, out_stream_count: u16) ->Self;
     fn set_incoming_streams(self, in_stream_count: u16) ->Self;
 }
-
-
-/// Custom structs ///
-
 
 #[repr(C,packed(4))]
 #[derive(Copy, Clone)]
@@ -96,8 +99,6 @@ impl SctpSenderReceiveInfo{
     }
 }
 
-
-/// Same SctpEventSubscribe as in the C API
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct SctpEventSubscribe {
@@ -119,7 +120,6 @@ pub struct SctpEventSubscribe {
 
 impl CStruct for SctpEventSubscribe{}
 
-/// Builder pattern for SctpEventSubstribe
 pub struct SctpEventSubscribeBuilder {
     sctp_data_io_event: u8,
     sctp_association_event: u8,
@@ -248,8 +248,10 @@ impl SctpEventSubscribeBuilder {
 }
 
 
+/// /////////////////////////////////
+/// FFI bindings for the sctp API ///
+/// ////////////////////////////////
 
-/// FFI binding of sctp functions that the libc crate does not provide
 #[link(name = "sctp")]
 extern "C"{
     fn sctp_recvmsg(sd: c_int, msg: *mut c_void, len: size_t, from: *mut sockaddr_in, fromlen: *mut socklen_t, sri: *mut sctp_sndrcvinfo, msg_flags: *mut c_int) -> c_int;
@@ -413,28 +415,4 @@ pub fn safe_sctp_socket() -> Result<RawFd>{
 
     wrap_result_nonnegative(result)
 
-}
-
-
-///
-/// Custom structs related functions
-///
-
-
-/// Function that takes the address of the struct SctpEventSubscribe and turns the address into &[u8]
-pub fn events_to_u8(events: &SctpEventSubscribe) -> &[u8]{
-
-    let ptr = events as *const SctpEventSubscribe as *const u8;
-    let size = size_of::<SctpEventSubscribe>();
-
-    unsafe{slice::from_raw_parts(ptr, size)}
-}
-
-/// Function that takes the address of the struct SctpEventSubscribe and turns the address into &mut [u8]
-pub fn events_to_u8_mut(events: &mut SctpEventSubscribe) -> &mut [u8] {
-
-    let ptr = events as *mut SctpEventSubscribe as *mut u8;
-    let size = size_of::<SctpEventSubscribe>();
-
-    unsafe { slice::from_raw_parts_mut(ptr, size) }
 }
