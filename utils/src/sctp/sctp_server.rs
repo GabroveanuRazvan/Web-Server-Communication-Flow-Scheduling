@@ -8,7 +8,7 @@ use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
 use crate::pools::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, events_to_u8, SctpPeerBuilder, events_to_u8_mut, SctpInitMsg, SctpStatus};
-use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, new_sock_addr_in, c_to_sock_addr, safe_getsockopt, safe_close};
+use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, c_to_sock_addr, safe_getsockopt, safe_close, CStruct};
 use crate::constants::{KILOBYTE};
 use crate::pools::connection_scheduler::ConnectionScheduler;
 
@@ -35,7 +35,7 @@ impl SctpServer{
         // convert all ipv4 addresses to C SockAddrIn
         for address in &self.addresses{
 
-            let current_socket_address: SockAddrIn = new_sock_addr_in(self.port,address.clone());
+            let current_socket_address: SockAddrIn = SockAddrIn::from_ipv4(self.port,address.clone());
 
             socket_addresses.push(current_socket_address);
 
@@ -67,12 +67,12 @@ impl SctpServer{
         let mut dummy_size = size_of::<SockAddrIn>();
 
         // a new SockAddrIn where the client data will be stored
-        let mut returned_sock_addr_c = new_sock_addr_in(0,Ipv4Addr::UNSPECIFIED);
+        let mut returned_sock_addr_c: SockAddrIn = SockAddrIn::from_ipv4(0,Ipv4Addr::UNSPECIFIED);
 
         let sock_fd = safe_accept(self.sock_fd,Some(&mut returned_sock_addr_c),Some(&mut dummy_size))?;
 
         // create a new stream and its data
-        Ok(SctpStream::new(sock_fd,c_to_sock_addr(&returned_sock_addr_c)))
+        Ok(SctpStream::new(sock_fd,returned_sock_addr_c.into()))
 
     }
 

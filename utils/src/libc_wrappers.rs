@@ -1,17 +1,101 @@
 use std::ffi::CString;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, sctp_sndrcvinfo, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink, sctp_initmsg, sockaddr_storage};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink, sctp_initmsg, sockaddr_storage, sctp_sndrcvinfo};
 use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
 use std::os::fd::RawFd;
+use crate::sctp::sctp_api::SctpSenderReceiveInfo;
+
+/// Common trait for all imported C structs
+pub trait CStruct{
+    fn new() -> Self where Self: Sized{
+        unsafe{mem::zeroed()}
+    }
+
+    fn as_mut_bytes(&mut self) -> &mut [u8] where Self: Sized{
+        unsafe{
+            slice::from_raw_parts_mut(
+                self as *mut Self as *mut u8,
+                mem::size_of::<Self>()
+            )
+        }
+    }
+
+}
 
 /// Aliases and structures that are not in libc
-
-pub type SockAddrIn = sockaddr_in;
-pub type SctpSenderInfo = sctp_sndrcvinfo;
 pub type SockAddrStorage = sockaddr_storage;
+
+
+#[repr(C)]
+#[derive(Copy, Clone,Default,Debug)]
+pub struct InAddr {
+    pub s_addr: u32,
+}
+impl CStruct for InAddr {}
+
+#[repr(C)]
+#[derive(Copy, Clone,Default,Debug)]
+pub struct SockAddrIn {
+    pub sin_family: u16,
+    pub sin_port: u16,
+    pub sin_addr: InAddr,
+    pub sin_zero: [u8; 8],
+}
+impl CStruct for SockAddrIn {}
+
+impl From<SocketAddrV4> for SockAddrIn {
+    fn from(addr: SocketAddrV4) -> Self {
+
+        let ip_octets = addr.ip().octets();
+        let port = addr.port();
+
+        let mut addr = InAddr::new();
+        addr.s_addr = u32::from_ne_bytes(ip_octets);
+
+        SockAddrIn{
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: addr,
+            sin_zero: [0;8],
+        }
+    }
+}
+
+impl From<SockAddrIn> for SocketAddrV4 {
+    fn from(sock_addr: SockAddrIn) -> Self {
+        let ip_bytes = sock_addr.sin_addr.s_addr.to_ne_bytes();
+        let ip = Ipv4Addr::new(ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+        let port = u16::from_be(sock_addr.sin_port);
+
+        SocketAddrV4::new(ip, port)
+    }
+}
+
+impl SockAddrIn {
+    pub fn from_ipv4(port: u16,ipv4: Ipv4Addr) -> Self{
+
+        let ip_octets = ipv4.octets();
+        let mut addr = InAddr::new();
+        addr.s_addr = u32::from_ne_bytes(ip_octets);
+
+        Self{
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: addr,
+            sin_zero: [0;8],
+        }
+
+    }
+
+    pub fn as_c_counterpart(&mut self) -> *mut sockaddr_in{
+        self as *mut Self as *mut sockaddr_in
+    }
+}
+
+
 
 /// FFI bindings for functions that the libc crate does not provide
 extern "C"{
@@ -203,28 +287,6 @@ pub fn get_ptr_from_mut_ref<T>(reference: Option<&mut T>) -> *mut T{
 /// Method like functions for C structs that cannot have a direct implementation
 
 
-/// Creates a new sock_addr_in like a constructor
-pub fn new_sock_addr_in(port: u16,ipv4: Ipv4Addr) -> SockAddrIn{
-
-    SockAddrIn{
-        sin_family: AF_INET as u16,
-        sin_port: port.to_be(),
-        sin_addr: in_addr{
-            s_addr: u32::from(ipv4).to_be(),
-        },
-        sin_zero: [0;8],
-    }
-
-}
-
-/// Creates an empty sctp_sndrinfo
-pub fn new_sctp_sndrinfo() -> SctpSenderInfo{
-
-    let info: SctpSenderInfo = unsafe { mem::zeroed() };
-    info
-}
-
-
 /// Function that transforms a C sock_addr_in into a rust SocketAddrV4
 pub fn c_to_sock_addr(addr: &SockAddrIn) -> SocketAddrV4{
 
@@ -238,42 +300,11 @@ pub fn c_to_sock_addr(addr: &SockAddrIn) -> SocketAddrV4{
     SocketAddrV4::new(ip, port)
 }
 
-/// Function that transforms a rust SocketAddrV4 into a C sock_addr_in
-pub fn sock_addr_to_c(addr: &SocketAddrV4) -> SockAddrIn{
-    // get the octets and port
-    let ip_octets = addr.ip().octets();
-    let port = addr.port();
-
-    // the port will be in big endian
-    SockAddrIn{
-        sin_family: AF_INET as u16,
-        sin_port: port.to_be(),
-        sin_addr: in_addr{
-            // get the 32 bits integer of the ip address
-            s_addr: u32::from_ne_bytes(ip_octets),
-        },
-        sin_zero: [0;8],
-    }
-
-}
 
 /// Debugging functions
 pub fn debug_sockaddr(sockaddr: &SockAddrIn){
     println!("Sockaddr(family:{}, port:{}, address: {})",sockaddr.sin_family,sockaddr.sin_port.to_be(),Ipv4Addr::from(sockaddr.sin_addr.s_addr.to_be()));
 }
-pub fn debug_sctp_sndrcvinfo(info: &SctpSenderInfo) {
-    println!("\nSCTP Send/Receive Info:");
-    println!("  Stream: {}", info.sinfo_stream);
-    println!("  SSN: {}", info.sinfo_ssn);
-    println!("  Flags: {}", info.sinfo_flags);
-    println!("  PPID: {}", info.sinfo_ppid);
-    println!("  Context: {}", info.sinfo_context);
-    println!("  TSN: {}", info.sinfo_tsn);
-    println!("  Cumulative TSN: {}", info.sinfo_cumtsn);
-    println!("  Association ID: {}\n", info.sinfo_assoc_id);
-}
-
-
 /// Builders
 
 

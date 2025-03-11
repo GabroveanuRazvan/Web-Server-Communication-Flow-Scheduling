@@ -5,8 +5,8 @@ use std::{fmt, mem, ptr, slice};
 use std::io::{Result};
 use std::net::{Ipv4Addr};
 use std::os::fd::RawFd;
-use crate::libc_wrappers::{safe_setsockopt, SockAddrStorage};
-use super::super::libc_wrappers::{debug_sctp_sndrcvinfo, get_ptr_from_mut_ref, wrap_result_nonnegative, SctpSenderInfo, SockAddrIn};
+use crate::libc_wrappers::{safe_setsockopt, CStruct, SockAddrStorage};
+use super::super::libc_wrappers::{wrap_result_nonnegative, SockAddrIn};
 
 /// Macros used in sctp_bindx function
 pub const SCTP_BINDX_ADD_ADDR: c_int = 1;
@@ -39,12 +39,7 @@ pub struct SctpPeerAddrInfo{
     pub spinfo_rto: u32,
     pub spinfo_mtu: u32,
 }
-
-impl SctpPeerAddrInfo{
-    pub fn new() -> Self{
-        unsafe{mem::zeroed()}
-    }
-}
+impl CStruct for SctpPeerAddrInfo{}
 
 #[repr(C,packed(4))]
 #[derive(Copy, Clone)]
@@ -66,23 +61,7 @@ impl fmt::Debug for SctpStatus{
 
     }
 }
-impl SctpStatus{
-    pub fn new() -> Self{
-        unsafe{mem::zeroed()}
-    }
-
-    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-
-        unsafe{
-            slice::from_raw_parts_mut(
-                self as *mut SctpStatus as *mut u8,
-                mem::size_of::<SctpStatus>()
-            )
-        }
-
-    }
-
-}
+impl CStruct for SctpStatus{}
 
 #[repr(C)]
 #[derive(Copy, Clone,Default,Debug)]
@@ -93,18 +72,27 @@ pub struct SctpInitMsg{
     pub sinit_max_init_timeo: u16,
 }
 
-impl SctpInitMsg{
-    pub fn new() -> Self{
-        unsafe{mem::zeroed()}
-    }
+impl CStruct for SctpInitMsg{}
 
-    pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        unsafe{
-            slice::from_raw_parts_mut(
-                self as *mut SctpInitMsg as *mut u8,
-                mem::size_of::<SctpInitMsg>()
-            )
-        }
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct SctpSenderReceiveInfo{
+    pub sinfo_stream: u16,
+    pub sinfo_ssn: u16,
+    pub sinfo_flags: u16,
+    pub sinfo_ppid: u32,
+    pub sinfo_context: u32,
+    pub sinfo_timetolive: u32,
+    pub sinfo_tsn: u32,
+    pub sinfo_cumtsn: u32,
+    pub sinfo_assoc_id: i32,
+}
+
+impl CStruct for SctpSenderReceiveInfo{}
+impl SctpSenderReceiveInfo{
+    pub fn as_c_counterpart(&mut self) -> *mut sctp_sndrcvinfo{
+        self as *mut SctpSenderReceiveInfo as *mut sctp_sndrcvinfo
     }
 }
 
@@ -129,27 +117,7 @@ pub struct SctpEventSubscribe {
     pub sctp_send_failure_event_event: u8,
 }
 
-impl SctpEventSubscribe{
-    /// Method used to quickly initialize a raw object without using mem::zeroed
-    pub fn new() -> SctpEventSubscribe {
-        SctpEventSubscribe{
-            sctp_data_io_event: 0,
-            sctp_association_event: 0,
-            sctp_address_event: 0,
-            sctp_send_failure_event: 0,
-            sctp_peer_error_event: 0,
-            sctp_shutdown_event: 0,
-            sctp_partial_delivery_event: 0,
-            sctp_adaptation_layer_event: 0,
-            sctp_authentication_event: 0,
-            sctp_sender_dry_event: 0,
-            sctp_stream_reset_event: 0,
-            sctp_assoc_reset_event: 0,
-            sctp_stream_change_event: 0,
-            sctp_send_failure_event_event: 0,
-        }
-    }
-}
+impl CStruct for SctpEventSubscribe{}
 
 /// Builder pattern for SctpEventSubstribe
 pub struct SctpEventSubscribeBuilder {
@@ -304,7 +272,7 @@ pub fn safe_sctp_recvmsg(
     sock_fd: i32,
     msg: &mut [u8],
     from_address: Option<&mut SockAddrIn>,
-    sender_info: Option<&mut sctp_sndrcvinfo>,
+    sender_info: Option<&mut SctpSenderReceiveInfo>,
     msg_flags: &mut i32
 
 ) -> Result<i32>{
@@ -324,7 +292,10 @@ pub fn safe_sctp_recvmsg(
 
     // get the sender info if it was specified
 
-    let sender_info_data = get_ptr_from_mut_ref(sender_info);
+    let sender_info_data = match sender_info{
+        Some(info) => unsafe{info.as_c_counterpart()},
+        None => ptr::null_mut()
+    };
 
     // call the unsafe FFI
     let result = unsafe{
@@ -332,7 +303,7 @@ pub fn safe_sctp_recvmsg(
         sctp_recvmsg(sock_fd,
                      msg.as_mut_ptr() as *mut c_void,
                      message_size,
-                     from_address_data.0,
+                     from_address_data.0 as *mut sockaddr_in,
                      from_address_data.1,
                      sender_info_data,
                      msg_flags as *mut c_int
@@ -381,7 +352,7 @@ pub fn safe_sctp_sendmsg(
             sctp_sendmsg(sock_fd,
                          msg.as_ptr() as *const c_void,
                          message_size,
-                         to_address,
+                         to_address.as_c_counterpart(),
                          address_size,
                          payload_protocol_id,
                          flags,
@@ -412,7 +383,7 @@ pub fn safe_sctp_bindx(socket_fd: i32, addrs: &mut [SockAddrIn], flags: i32) -> 
 /// Wrapper function for sctp_connextx function
 pub fn safe_sctp_connectx(socket_fd: i32,addrs: &mut [SockAddrIn]) -> Result<i32>{
     let address_count = addrs.len() as i32;
-    let addrs_ptr = addrs.as_mut_ptr();
+    let addrs_ptr = addrs.as_mut_ptr() as *mut sockaddr_in;
 
     let result = unsafe{
         sctp_connectx(socket_fd,addrs_ptr,address_count,ptr::null_mut())

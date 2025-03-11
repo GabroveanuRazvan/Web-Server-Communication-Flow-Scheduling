@@ -14,7 +14,7 @@ use utils::http_parsers::extract_http_paths;
 use std::num::Wrapping;
 use std::time::Duration;
 use libc::{listen, setsockopt, IPPROTO_SCTP, SCTP_INITMSG, SCTP_STATUS};
-use utils::libc_wrappers::{safe_accept, safe_getsockopt, safe_listen, safe_setsockopt, sock_addr_to_c};
+use utils::libc_wrappers::{safe_accept, safe_getsockopt, safe_listen, safe_setsockopt, CStruct, SockAddrIn};
 use utils::pools::indexed_thread_pool::IndexedTreadPool;
 use utils::sctp::sctp_api::{safe_sctp_bindx, safe_sctp_connectx, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerAddrInfo, SctpStatus, SCTP_BINDX_ADD_ADDR};
 
@@ -22,8 +22,7 @@ fn main(){
 
     let sockfd = safe_sctp_socket().unwrap();
 
-    let sockaddr =SocketAddrV4::new(Ipv4Addr::new(127,0,0,1), 9898);
-    let sockaddr = sock_addr_to_c(&sockaddr);
+    let sockaddr: SockAddrIn = SocketAddrV4::new(Ipv4Addr::new(127,0,0,1), 9898).into();
 
     let mut sctp_init: SctpInitMsg = SctpInitMsg::new();
     sctp_init.sinit_num_ostreams = 20;

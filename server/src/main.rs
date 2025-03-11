@@ -1,8 +1,10 @@
 use std::io::Result;
 use std::net::Ipv4Addr;
+use std::num::NonZero;
 use utils::sctp::sctp_server::{SctpServer, SctpServerBuilder};
 use utils::sctp::sctp_api::{SctpPeerBuilder, SctpEventSubscribeBuilder};
 use std::path::Path;
+use std::thread;
 //netstat -lnp | grep sctp
 
 const MAX_CONNECTIONS: u16 = 100;
@@ -12,7 +14,7 @@ const PATH_STR: &str = "./web_files";
 
 fn main() -> Result<()> {
     let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
-
+    let num_cpus = thread::available_parallelism().unwrap_or(NonZero::new(12).unwrap()).get();
     let mut server = SctpServerBuilder::new()
         .socket()
         .address(IPV4)
@@ -20,8 +22,8 @@ fn main() -> Result<()> {
         .max_connections(MAX_CONNECTIONS)
         .events(events)
         .path(Path::new(PATH_STR))
-        .set_outgoing_streams(20)
-        .set_incoming_streams(12)
+        .set_outgoing_streams(num_cpus as u16)
+        .set_incoming_streams(10)
         .build();
 
     server.bind()

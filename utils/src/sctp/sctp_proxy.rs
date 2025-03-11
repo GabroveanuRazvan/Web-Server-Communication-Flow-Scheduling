@@ -1,26 +1,19 @@
 use std::{fs, io, thread};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, MAX_STREAM_NUMBER};
+use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, SctpSenderReceiveInfo, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
 use std::thread::JoinHandle;
-use memmap2::{MmapMut};
 use crate::http_parsers::{encode_path};
-use crate::libc_wrappers::{new_sctp_sndrinfo};
 use crate::constants::{KILOBYTE, MEGABYTE};
+use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
-use crate::packets::chunk_type::FilePacketType;
-use crate::pools::thread_pool::ThreadPool;
-use crate::packets::file_packet_error::FilePacketError;
-use std::result::Result as StdResult;
-use crate::packets::chunk_type::FilePacketType::LastChunk;
 use crate::pools::indexed_thread_pool::IndexedTreadPool;
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
@@ -70,14 +63,12 @@ impl SctpProxy{
             .addresses(self.sctp_peer_addresses.clone())
             .ttl(0)
             .events(events)
-            .set_outgoing_streams(3)
-            .set_incoming_streams(4)
+            .set_outgoing_streams(10)
+            .set_incoming_streams(24)
             .build();
 
         sctp_client.connect();
         sctp_client.events();
-
-        println!("{:?}",sctp_client.get_sctp_status());
 
         // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();
@@ -194,7 +185,7 @@ impl SctpProxy{
         thread::spawn(move || {
 
             // init a new thread pool that will download the files
-            let mut sender_info = new_sctp_sndrinfo();
+            let mut sender_info = SctpSenderReceiveInfo::new();
             let mut download_pool = IndexedTreadPool::new(DOWNLOAD_THREADS);
 
             loop{
@@ -212,8 +203,8 @@ impl SctpProxy{
 
                     Ok(bytes_read) => {
 
-                        let ppid = sender_info.sinfo_ppid as u32;
-                        let stream_number = sender_info.sinfo_stream as u16;
+                        let ppid = sender_info.sinfo_ppid;
+                        let stream_number = sender_info.sinfo_stream;
 
                         // Send the packet to be downloaded by the designated thread
                         download_pool.execute(stream_number as usize,move || {

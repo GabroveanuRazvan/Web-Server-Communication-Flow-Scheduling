@@ -5,9 +5,10 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use crate::constants::BYTE;
-use crate::libc_wrappers::{new_sctp_sndrinfo, SctpSenderInfo};
+use crate::libc_wrappers::CStruct;
 use crate::mapped_file::{MappedFile};
 use crate::packets::byte_packet::BytePacket;
+use crate::sctp::sctp_api::SctpSenderReceiveInfo;
 use crate::sctp::sctp_client::SctpStream;
 
 
@@ -73,7 +74,7 @@ impl ConnectionScheduler{
     ///
     pub fn start(self){
         let mut buffer: Vec<u8> = vec![0;self.buffer_size];
-        let mut sender_info: SctpSenderInfo = new_sctp_sndrinfo();
+        let mut sender_info: SctpSenderReceiveInfo = SctpSenderReceiveInfo::new();
 
 
         loop {

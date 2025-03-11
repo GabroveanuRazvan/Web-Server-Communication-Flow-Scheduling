@@ -1,8 +1,8 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
-use crate::libc_wrappers::{debug_sockaddr, new_sock_addr_in, safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, sock_addr_to_c, SctpSenderInfo, SockAddrIn};
-use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpStatus};
+use crate::libc_wrappers::{safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, CStruct, SockAddrIn};
+use crate::sctp::sctp_api::{events_to_u8, events_to_u8_mut, safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpSenderReceiveInfo, SctpStatus};
 use io::Result;
 use std::os::fd::RawFd;
 
@@ -50,9 +50,8 @@ impl SctpStream{
         // convert the ivp4 peer addresses to C sockaddr_in
         for address in peer_addresses{
 
-            let current_socket_address: SockAddrIn = new_sock_addr_in(self.address.port(),address.clone());
-
-            debug_sockaddr(&current_socket_address);
+            let current_socket_address = SockAddrIn::from_ipv4(self.address.port(),address.clone());
+            println!("{:?}",current_socket_address);
 
             socket_addresses.push(current_socket_address)
 
@@ -83,10 +82,10 @@ impl SctpStream{
 
     /// Method used to read data from the socket, stores the client address and info
     pub fn read(&self, buffer: &mut [u8],
-                sender_info: Option<&mut SctpSenderInfo>,
+                sender_info: Option<&mut SctpSenderReceiveInfo>,
                 flags: Option<&mut i32>) ->Result<usize>{
 
-        let mut returned_sock_addr_c = sock_addr_to_c(&self.local_address());
+        let mut returned_sock_addr_c = self.local_address().clone().into();
 
         let mut dummy_flags = 0;
 
@@ -104,7 +103,7 @@ impl SctpStream{
     /// Method used to write data to a peer using a designated stream
     pub fn write(&self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32,context: u32) -> Result<usize>{
 
-        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+        let mut sock_addr_c = self.local_address().clone().into();
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
             Ok(size) => Ok(size as usize),
@@ -116,7 +115,7 @@ impl SctpStream{
     pub fn write_all(&self, buffer: &[u8], stream_number: u16, ppid: u32,context: u32) -> Result<usize>{
         let num_bytes = buffer.len();
 
-        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+        let mut sock_addr_c = self.local_address().clone().into();
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
             Ok(size) => Ok(size as usize),
@@ -126,7 +125,7 @@ impl SctpStream{
 
     /// Method used to write the buffer in a loop using chunks of chunk_size bytes
     pub fn write_chunked(&self, buffer: &[u8],chunk_size: usize, stream_number: u16, ppid: u32,context: u32)-> Result<usize>{
-        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+        let mut sock_addr_c: SockAddrIn = self.local_address().clone().into();
 
         let mut total_bytes = 0usize;
 
@@ -143,7 +142,7 @@ impl SctpStream{
 
         let buffer: [u8;5] = [0;5];
 
-        let mut sock_addr_c = sock_addr_to_c(&self.local_address());
+        let mut sock_addr_c = self.local_address().clone().into();
 
         match safe_sctp_sendmsg(self.sock_fd,&buffer,1,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
             Ok(size) => Ok(size as usize),
