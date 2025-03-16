@@ -23,6 +23,11 @@ pub mod packets{
     pub mod file_packet_error;
 }
 
+pub mod config{
+    pub mod sctp_server_config;
+    pub mod serialization;
+}
+
 pub mod libc_wrappers;
 pub mod http_parsers;
 pub mod mapped_file;

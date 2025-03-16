@@ -3,18 +3,14 @@ use std::io::Result;
 use std::net::Ipv4Addr;
 use std::os::fd::RawFd;
 use std::path::Path;
-use std::thread;
-use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
+use crate::constants::SERVER_RECEIVE_BUFFER_SIZE;
+use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG};
+use crate::config::sctp_server_config::SctpServerConfig;
 use crate::pools::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, SctpPeerBuilder, SctpInitMsg};
-use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, c_to_sock_addr, safe_getsockopt, safe_close, CStruct};
-use crate::constants::{KILOBYTE};
+use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, safe_getsockopt, safe_close, CStruct};
 use crate::pools::connection_scheduler::ConnectionScheduler;
-
-const BUFFER_SIZE: usize = 64 * KILOBYTE;
-const FILE_PACKET_SIZE: usize = 64 * KILOBYTE;
-const THREAD_POOL_SIZE: usize = 6;
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -22,7 +18,9 @@ pub struct SctpServer {
     addresses: Vec<Ipv4Addr>,
     port: u16,
     max_connections: u16,
+    outgoing_stream_count: usize,
     active_events: SctpEventSubscribe,
+
 }
 
 /// Abstract implementation of a sctp server
@@ -103,14 +101,13 @@ impl SctpServer{
 
     ///Method used to handle clients
 
-    pub fn handle_client(stream: SctpStream) -> Result<()>{
+    pub fn handle_client(&self,stream: SctpStream) -> Result<()>{
 
         println!("New client!");
         println!("Client address: {}", stream.local_address());
 
-        let num_cpus = thread::available_parallelism()?.get();
-        // let num_cpus = 6;
-        let mut scheduler = ConnectionScheduler::new(num_cpus,stream,BUFFER_SIZE,FILE_PACKET_SIZE);
+        let file_packet_size = SctpServerConfig::file_packet_size();
+        let mut scheduler = ConnectionScheduler::new(self.outgoing_stream_count,stream,SERVER_RECEIVE_BUFFER_SIZE,file_packet_size);
 
         scheduler.start();
 
@@ -179,7 +176,7 @@ impl SctpServerBuilder{
     }
 
     /// Sets the working directory to path
-    pub fn path(self, path: &Path) -> Self{
+    pub fn root(self, path: &Path) -> Self{
         match set_current_dir(path){
             Ok(_) => self,
             Err(error) => {
@@ -203,6 +200,7 @@ impl SctpServerBuilder{
             addresses: self.addresses,
             port: self.port,
             max_connections: self.max_connections,
+            outgoing_stream_count: self.outgoing_stream_count as usize,
             active_events: self.active_events,
         }
     }

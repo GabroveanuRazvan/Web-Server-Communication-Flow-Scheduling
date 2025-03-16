@@ -86,7 +86,6 @@ impl ConnectionScheduler{
                 break;
             }
 
-            // debug_sctp_sndrcvinfo(&sender_info);
 
             let path_request = String::from_utf8_lossy(&buffer[..bytes_read]);
 
