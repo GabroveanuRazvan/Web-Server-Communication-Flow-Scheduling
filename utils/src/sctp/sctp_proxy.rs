@@ -3,32 +3,33 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, SctpSenderReceiveInfo, MAX_STREAM_NUMBER};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
+use std::num::NonZero;
 use std::path::{PathBuf};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
 use std::thread::JoinHandle;
-use crate::http_parsers::{encode_path};
-use crate::constants::{KILOBYTE, MEGABYTE};
+use memmap2::Mmap;
+use crate::http_parsers::{encode_path, extract_http_paths};
+use crate::constants::{KILOBYTE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
 use crate::pools::indexed_thread_pool::IndexedTreadPool;
 
 const BUFFER_SIZE: usize = 64 * KILOBYTE;
-const CACHE_CAPACITY: usize = 100 * MEGABYTE;
-const CHUNK_SIZE: usize = 64 * KILOBYTE;
-
-const DOWNLOAD_THREADS: usize = 12;
 const CACHE_PATH: &str = "/tmp/tmpfs";
 const DOWNLOAD_SUFFIX: &str = ".tmp";
 
 ///Maps each payload protocol id to the requested file name (not encoded).
 static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Maps each payload protocol id to its corresponding opened file when the file is being downloaded
+/// Maps each payload protocol id to its corresponding opened file buf writer while the file is being downloaded
 static FILE_MAP: LazyLock<RwLock<HashMap<u32,Mutex<Option<BufWriter<File>>>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Set of the not encoded downloaded files, used to
+static DOWNLOADED_FILES: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| RwLock::new(HashSet::new()));
 
 
 /// Abstraction for a tcp to sctp proxy
@@ -72,22 +73,21 @@ impl SctpProxy{
 
         // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();
+        let (prefetch_tx, prefetch_rx) = mpsc::channel();
 
         let sender_sctp_stream = sctp_client.try_clone()?;
         let receiver_sctp_stream = sctp_client.try_clone()?;
 
         // run the sctp client threads
         Self::sender_sctp_thread(sender_sctp_stream,sctp_rx);
-        Self::receiver_sctp_thread(receiver_sctp_stream);
+        Self::receiver_sctp_thread(receiver_sctp_stream,prefetch_tx);
+        Self::prefetch_thread(prefetch_rx,sctp_tx.clone());
 
         // for each tcp client init a tcp receiver thread
         for stream in tcp_server.incoming(){
 
             let stream = stream?;
-
-            let sctp_tx_clone = sctp_tx.clone();
-
-            Self::receiver_tcp_thread(stream,sctp_tx_clone);
+            Self::receiver_tcp_thread(stream,sctp_tx.clone());
 
         }
 
@@ -96,7 +96,7 @@ impl SctpProxy{
 
     /// Tcp receiver thread that reads incoming request and sends them to be forwarded by the sctp sender thread.
     ///
-    fn receiver_tcp_thread(tcp_stream: TcpStream, sctp_tx: Sender<Vec<u8>>) -> JoinHandle<Result<()>>{
+    fn receiver_tcp_thread(tcp_stream: TcpStream, sctp_tx: Sender<String>) -> JoinHandle<Result<()>>{
 
         let reader = BufReader::new(tcp_stream);
 
@@ -106,7 +106,7 @@ impl SctpProxy{
 
                 let request = line?;
 
-                sctp_tx.send(request.as_bytes().to_vec()).map_err(
+                sctp_tx.send(request).map_err(
                     |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
                 )?;
 
@@ -122,18 +122,19 @@ impl SctpProxy{
     /// Sctp thread that sends incoming requests to the server to be processed.
     /// Each request is mapped to a unique ppid value.
     ///
-    fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<Vec<u8>>) -> JoinHandle<Result<()>>{
+    fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<String>) -> JoinHandle<Result<()>>{
 
         println!("Sctp sender thread started!");
+
+        let sctp_status = sctp_client.get_sctp_status();
+        let outgoing_stream_num = sctp_status.sstat_outstrms;
 
         thread::spawn(move || {
 
             let mut stream_number = 0u16;
             let mut current_ppid = 0;
 
-            for request_buffer in sctp_rx {
-
-                let path = String::from_utf8_lossy(&request_buffer);
+            for path in sctp_rx {
 
                 let file_path = match path.trim() {
                     "/" => "/index.html".to_string(),
@@ -142,31 +143,90 @@ impl SctpProxy{
                     }
                 };
 
+                //Check if the file is already in the cache
+                {
+                    match DOWNLOADED_FILES.read().unwrap().get(file_path.as_str()){
+                        Some(_) => continue,
+                        None => (),
+                    };
+
+                    DOWNLOADED_FILES.write().unwrap().insert(file_path.clone());
+                }
 
                 let cache_file_name = encode_path(&file_path) + DOWNLOAD_SUFFIX;
                 let cache_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
 
                 // Insert an entry into the ppid map and processed chunks
-                PPID_MAP.write().unwrap().insert(current_ppid,file_path.to_string());
-
-                let file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .read(true)
-                    .open(cache_file_path)?;
+                {
+                    PPID_MAP.write().unwrap().insert(current_ppid,file_path.to_string());
+                }
 
                 // Insert the opened file into its map
-                FILE_MAP.write().unwrap().insert(current_ppid,Mutex::new(Some(BufWriter::new(file))));
+                {
+                    let file = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .read(true)
+                        .open(cache_file_path)?;
+
+                    FILE_MAP.write().unwrap().insert(current_ppid,Mutex::new(Some(BufWriter::new(file))));
+                }
+
 
                 // Send the request to the server
-                sctp_client.write_all(&request_buffer,stream_number,current_ppid,0)?;
+                sctp_client.write_all(path.as_bytes(),stream_number,current_ppid,0)?;
 
                 // Round-robin over the streams
-                stream_number = (stream_number + 1) % MAX_STREAM_NUMBER;
+                stream_number = (stream_number + 1) % outgoing_stream_num;
                 current_ppid += 1;
 
 
             }
+
+            Ok(())
+        })
+
+    }
+
+
+    /// Thread that receives the paths of downloaded files. Parses the html files in order to make requests in advance, before the browser does.
+    fn prefetch_thread(prefetch_rx: Receiver<PathBuf>, sctp_tx: Sender<String>) -> JoinHandle<Result<()>> {
+
+        thread::spawn(move || {
+
+            for file_name in prefetch_rx{
+
+                // Check the file extension
+                if let Some(extension) = file_name.extension(){
+                    if extension != "html"{
+                        continue;
+                    }
+                }
+                else{
+                    continue;
+                }
+
+                // Read the file and parse it
+                let file = OpenOptions::new()
+                    .read(true)
+                    .create(false)
+                    .truncate(false)
+                    .open(&file_name).expect("Could not open file to prefetch");
+
+                let mmap = unsafe{Mmap::map(&file).unwrap()};
+                let file_content = String::from_utf8_lossy(&mmap);
+                let prefetched_file_names = extract_http_paths(&file_content);
+
+                // Send the file requests to the sctp sender
+                for file_name in prefetched_file_names{
+                    sctp_tx.send(file_name).map_err(
+                        |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
+                    )?;
+                }
+
+
+            }
+
 
             Ok(())
         })
@@ -178,7 +238,7 @@ impl SctpProxy{
     /// Each file is identified through a unique ppid value.
     /// After the message is received, it is sent to a download thread pool to be processed.
     ///
-    fn receiver_sctp_thread(sctp_client: SctpStream) -> JoinHandle<Result<()>>{
+    fn receiver_sctp_thread(sctp_client: SctpStream,prefetch_tx: Sender<PathBuf>) -> JoinHandle<Result<()>>{
 
         println!("Sctp receiver thread started!");
 
@@ -186,7 +246,8 @@ impl SctpProxy{
 
             // init a new thread pool that will download the files
             let mut sender_info = SctpSenderReceiveInfo::new();
-            let mut download_pool = IndexedTreadPool::new(DOWNLOAD_THREADS);
+            let num_cpus = thread::available_parallelism().unwrap_or(NonZero::new(6).unwrap()).get();
+            let mut download_pool = IndexedTreadPool::new(num_cpus);
 
             loop{
 
@@ -205,11 +266,12 @@ impl SctpProxy{
 
                         let ppid = sender_info.sinfo_ppid;
                         let stream_number = sender_info.sinfo_stream;
+                        let prefetch_tx = prefetch_tx.clone();
 
                         // Send the packet to be downloaded by the designated thread
                         download_pool.execute(stream_number as usize,move || {
                             let mut byte_packet = BytePacket::from(&buffer[..bytes_read]);
-                            Self::parse_chunk_packet(&mut byte_packet,ppid);
+                            Self::parse_chunk_packet(&mut byte_packet,ppid,prefetch_tx);
                         })
 
                     }
@@ -224,7 +286,7 @@ impl SctpProxy{
     }
 
     /// Parses the received file chunk bytes.
-    fn parse_chunk_packet(byte_packet: &mut BytePacket,ppid: u32){
+    fn parse_chunk_packet(byte_packet: &mut BytePacket,ppid: u32,prefetch_tx: Sender<PathBuf>){
 
         // Extract the packet data
         let chunk_index = byte_packet.read_u16().unwrap();
@@ -251,8 +313,8 @@ impl SctpProxy{
             let cache_file_name = PathBuf::from(&Self::get_file_path(ppid));
             let new_file_name = cache_file_name.with_extension("");
 
-            fs::rename(cache_file_name, new_file_name).unwrap();
-
+            fs::rename(cache_file_name, &new_file_name).unwrap();
+            prefetch_tx.send(new_file_name).unwrap();
         }
 
     }

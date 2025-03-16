@@ -6,7 +6,6 @@ use std::io::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::{mem, ptr, slice};
 use std::os::fd::RawFd;
-use crate::sctp::sctp_api::SctpSenderReceiveInfo;
 
 /// Common trait for all imported C structs
 pub trait CStruct{

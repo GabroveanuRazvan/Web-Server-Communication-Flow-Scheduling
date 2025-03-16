@@ -156,6 +156,7 @@ pub fn basic_http_get_request(uri: &str) -> Request<()> {
 
 }
 
+/// Parses the html file and extracts all afferent paths from href and src selectors.
 pub fn extract_http_paths(html_content: &str) -> Vec<String> {
 
     // parse the html document

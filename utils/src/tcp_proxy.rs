@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use std::io::{BufRead, BufReader, Read, Result, Write};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Condvar, RwLock, LazyLock};
+use std::io::{Read, Result, Write};
+use std::path::{PathBuf};
+use std::sync::{RwLock, LazyLock};
 use crate::constants::KILOBYTE;
 use crate::http_parsers::{basic_http_response, encode_path, extract_uri, http_response_to_string};
-use std::sync::mpsc::{channel, Receiver,Sender };
+use std::sync::mpsc::{channel,Sender };
 use std::{fs, thread};
 use std::thread::JoinHandle;
 use inotify::{EventMask, Inotify, WatchMask};
