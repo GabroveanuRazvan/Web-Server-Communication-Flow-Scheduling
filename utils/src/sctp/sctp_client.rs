@@ -33,12 +33,6 @@ impl SctpStream{
 
     pub fn connect(&mut self) -> &Self{
 
-        // // crate a new socket
-        // match safe_sctp_socket(){
-        //     Ok(sock_fd) => self.sock_fd = sock_fd,
-        //     Err(error)=> panic!("Sctp stream socket error: {}",error),
-        // }
-
         // check if we have any addresses to connect to
         let peer_addresses = match self.peer_addresses{
             Some(ref addresses) => addresses,
@@ -85,7 +79,7 @@ impl SctpStream{
                 sender_info: Option<&mut SctpSenderReceiveInfo>,
                 flags: Option<&mut i32>) ->Result<usize>{
 
-        let mut returned_sock_addr_c = self.local_address().clone().into();
+        let mut returned_sock_addr_c = self.local_address().into();
 
         let mut dummy_flags = 0;
 
@@ -103,7 +97,7 @@ impl SctpStream{
     /// Method used to write data to a peer using a designated stream
     pub fn write(&self, buffer: &[u8], num_bytes: usize, stream_number: u16, ppid: u32,context: u32) -> Result<usize>{
 
-        let mut sock_addr_c = self.local_address().clone().into();
+        let mut sock_addr_c = self.local_address().into();
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
             Ok(size) => Ok(size as usize),
@@ -115,40 +109,12 @@ impl SctpStream{
     pub fn write_all(&self, buffer: &[u8], stream_number: u16, ppid: u32,context: u32) -> Result<usize>{
         let num_bytes = buffer.len();
 
-        let mut sock_addr_c = self.local_address().clone().into();
+        let mut sock_addr_c = self.local_address()  .into();
 
         match safe_sctp_sendmsg(self.sock_fd,buffer,num_bytes,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
             Ok(size) => Ok(size as usize),
             Err(error) => Err(error),
         }
-    }
-
-    /// Method used to write the buffer in a loop using chunks of chunk_size bytes
-    pub fn write_chunked(&self, buffer: &[u8],chunk_size: usize, stream_number: u16, ppid: u32,context: u32)-> Result<usize>{
-        let mut sock_addr_c: SockAddrIn = self.local_address().clone().into();
-
-        let mut total_bytes = 0usize;
-
-        for chunk in buffer.chunks(chunk_size) {
-            total_bytes += self.write_all(chunk,stream_number,ppid,context)?;
-        }
-
-        Ok(total_bytes)
-
-    }
-
-    /// Method used to write one null terminated message to mark end of writing/reading to fellow peer
-    pub fn write_null(&self,stream_number: u16,ppid: u32,context: u32) -> Result<usize>{
-
-        let buffer: [u8;5] = [0;5];
-
-        let mut sock_addr_c = self.local_address().clone().into();
-
-        match safe_sctp_sendmsg(self.sock_fd,&buffer,1,&mut sock_addr_c,ppid,0,stream_number,self.ttl,context){
-            Ok(size) => Ok(size as usize),
-            Err(error) => Err(error),
-        }
-
     }
 
     /// Method used to peek into the socket buffer
@@ -163,7 +129,7 @@ impl SctpStream{
     }
 
     /// Method used to activate the event options of the client
-    /// !!! Should always be called AFTER connect call
+    /// !!! Must always be called AFTER connect call
     pub fn events(&self) ->&Self{
 
         let events_ref = match &self.active_events {
@@ -235,9 +201,9 @@ impl Drop for SctpStream{
 
 pub struct SctpStreamBuilder{
     sock_fd: i32,
-    // this will be completed if the stream was created by an accept call or be the first peer address if the client connects
+    // this will be assigned if the stream was created by an accept call or be the first peer address if the client connects
     address: SocketAddrV4,
-    // this will be completed if the stream calls connect
+    // this will be assigned if the stream calls connect
     peer_addresses: Option<Vec<Ipv4Addr>>,
     // if the stream is created by accept this will be None
     active_events: Option<SctpEventSubscribe>,
@@ -314,7 +280,7 @@ impl SctpPeerBuilder for SctpStreamBuilder {
     }
 
     /// Adds a subset of addresses to be later connected to
-    fn addresses(mut self, mut addresses: Vec<Ipv4Addr>) -> Self{
+    fn addresses(mut self, addresses: Vec<Ipv4Addr>) -> Self{
 
         self.peer_addresses = Some(addresses);
         self
@@ -346,27 +312,6 @@ impl SctpPeerBuilder for SctpStreamBuilder {
 
         self.incoming_stream_count = in_stream_count;
         self
-    }
-
-}
-
-#[derive(Debug)]
-pub struct SctpPacketData{
-    pub stream_number: u16,
-    pub ppid: u32,
-    pub flags: u32,
-    pub context:u32,
-}
-
-impl SctpPacketData{
-    pub fn new(stream_number: u16, flags: u32, ppid: u32, context: u32) -> Self{
-
-        Self{
-            stream_number,
-            flags,
-            ppid,
-            context,
-        }
     }
 
 }

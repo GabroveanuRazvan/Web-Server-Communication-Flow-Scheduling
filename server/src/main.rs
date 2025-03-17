@@ -1,6 +1,6 @@
 use std::io::Result;
 use std::num::NonZero;
-use utils::sctp::sctp_server::{SctpServer, SctpServerBuilder};
+use utils::sctp::sctp_server::{SctpServerBuilder};
 use utils::sctp::sctp_api::{SctpPeerBuilder, SctpEventSubscribeBuilder};
 use std::thread;
 use utils::config::sctp_server_config::SctpServerConfig;
