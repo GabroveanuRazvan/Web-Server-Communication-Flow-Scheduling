@@ -100,8 +100,11 @@ impl SockAddrIn {
 
     }
 
-    pub fn as_c_counterpart(&mut self) -> *mut sockaddr_in{
+    pub fn as_mut_c_counterpart(&mut self) -> *mut sockaddr_in{
         self as *mut Self as *mut sockaddr_in
+    }
+    pub fn as_c_counterpart(&self) -> *const sockaddr_in{
+        self as *const Self as *const sockaddr_in
     }
 }
 

@@ -94,8 +94,11 @@ pub struct SctpSenderReceiveInfo{
 
 impl CStruct for SctpSenderReceiveInfo{}
 impl SctpSenderReceiveInfo{
-    pub fn as_c_counterpart(&mut self) -> *mut sctp_sndrcvinfo{
-        self as *mut SctpSenderReceiveInfo as *mut sctp_sndrcvinfo
+    pub fn as_mut_c_counterpart(&mut self) -> *mut sctp_sndrcvinfo{
+        self as *mut Self as *mut sctp_sndrcvinfo
+    }
+    pub fn as_c_counterpart(&self) -> *const sctp_sndrcvinfo{
+        self as *const Self as *const sctp_sndrcvinfo
     }
 }
 
@@ -295,7 +298,7 @@ pub fn safe_sctp_recvmsg(
     // get the sender info if it was specified
 
     let sender_info_data = match sender_info{
-        Some(info) => unsafe{info.as_c_counterpart()},
+        Some(info) => unsafe{info.as_mut_c_counterpart()},
         None => ptr::null_mut()
     };
 
@@ -322,7 +325,7 @@ pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
     msg_size: usize,
-    to_address: &mut SockAddrIn,
+    to_address: &SockAddrIn,
     payload_protocol_id: u32,
     flags: u32,
     stream_number: u16,
