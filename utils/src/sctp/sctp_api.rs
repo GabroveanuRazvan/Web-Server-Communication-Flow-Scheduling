@@ -321,11 +321,11 @@ pub fn safe_sctp_recvmsg(
 }
 
 /// Wrapper function for sctp_sendmsg
+/// !Does not use sockaddr_in, the function lets the protocol to decide the best association ipv4 to connect to
 pub fn safe_sctp_sendmsg(
     sock_fd: i32,
     msg: &[u8],
     msg_size: usize,
-    to_address: &SockAddrIn,
     payload_protocol_id: u32,
     flags: u32,
     stream_number: u16,
@@ -357,7 +357,7 @@ pub fn safe_sctp_sendmsg(
             sctp_sendmsg(sock_fd,
                          msg.as_ptr() as *const c_void,
                          message_size,
-                         to_address.as_c_counterpart(),
+                         ptr::null() as *const sockaddr_in,
                          address_size,
                          payload_protocol_id,
                          flags,

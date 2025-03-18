@@ -37,7 +37,6 @@ static DOWNLOADED_FILES: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| Rw
 /// The client will connect to the sctp-server using its addresses and send the data to be processes
 pub struct SctpProxy{
     port: u16,
-    sctp_address: Ipv4Addr,
     sctp_peer_addresses: Vec<Ipv4Addr>,
     tcp_address: Ipv4Addr,
 }
@@ -49,7 +48,6 @@ impl SctpProxy{
         let mut tcp_server =TcpListener::bind((self.tcp_address.to_string(),self.port))?;
 
         println!("Sctp Proxy started and listening on {:?}:{}",self.tcp_address,self.port);
-        println!("Messages redirected to: {:?}:{}",self.sctp_address,self.port);
 
         // cache setup
         create_dir_all(CACHE_PATH)?;
@@ -60,7 +58,6 @@ impl SctpProxy{
         let mut sctp_client = SctpStreamBuilder::new()
             .socket()
             .port(self.port)
-            .address(self.sctp_address)
             .addresses(self.sctp_peer_addresses.clone())
             .ttl(0)
             .events(events)
@@ -342,7 +339,6 @@ impl SctpProxy{
 pub struct SctpProxyBuilder{
 
     port: u16,
-    sctp_address: Ipv4Addr,
     sctp_peer_addresses: Vec<Ipv4Addr>,
     tcp_address: Ipv4Addr,
 }
@@ -354,7 +350,6 @@ impl SctpProxyBuilder {
 
         Self{
             port: 0,
-            sctp_address: Ipv4Addr::new(0, 0, 0, 0),
             sctp_peer_addresses: vec![],
             tcp_address: Ipv4Addr::new(0, 0, 0, 0),
         }
@@ -374,13 +369,6 @@ impl SctpProxyBuilder {
         self
     }
 
-    /// Sets the address that will be used to send data
-    pub fn sctp_address(mut self, address: Ipv4Addr) -> Self {
-
-        self.sctp_address = address;
-        self
-    }
-
     /// Sets the address that the tcp server will listen to
     pub fn tcp_address(mut self, address: Ipv4Addr) -> Self {
 
@@ -393,7 +381,6 @@ impl SctpProxyBuilder {
 
         SctpProxy{
             port: self.port,
-            sctp_address: self.sctp_address,
             sctp_peer_addresses: self.sctp_peer_addresses,
             tcp_address: self.tcp_address,
         }

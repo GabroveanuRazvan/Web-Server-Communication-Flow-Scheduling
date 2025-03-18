@@ -70,7 +70,7 @@ impl SctpServer{
         let sock_fd = safe_accept(self.sock_fd,Some(&mut returned_sock_addr_c),Some(&mut dummy_size))?;
 
         // create a new stream and its data
-        Ok(SctpStream::new(sock_fd,returned_sock_addr_c.into()))
+        Ok(unsafe{SctpStream::from(sock_fd,returned_sock_addr_c.into())})
 
     }
 
@@ -104,7 +104,7 @@ impl SctpServer{
     pub fn handle_client(&self,stream: SctpStream) -> Result<()>{
 
         println!("New client!");
-        println!("Client address: {}", stream.local_address());
+        println!("Client address: {:?}", stream.local_address());
 
         let file_packet_size = SctpServerConfig::file_packet_size();
         let mut scheduler = ConnectionScheduler::new(self.outgoing_stream_count,stream,SERVER_RECEIVE_BUFFER_SIZE,file_packet_size);

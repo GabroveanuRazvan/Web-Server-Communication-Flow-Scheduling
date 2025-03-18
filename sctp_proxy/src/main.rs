@@ -16,7 +16,6 @@ fn main() -> Result<()> {
     let mut proxy = SctpProxyBuilder::new()
         .port(PORT)
         .tcp_address(TCP_IPV4)
-        .sctp_address(SCTP_IPV4)
         .sctp_peer_addresses(SCTP_PEER_IPV4.to_vec())
         .build();
 
