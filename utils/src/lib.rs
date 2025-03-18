@@ -26,6 +26,7 @@ pub mod packets{
 pub mod config{
     pub mod sctp_server_config;
     pub mod serialization;
+    pub mod sctp_proxy_config;
 }
 
 pub mod libc_wrappers;

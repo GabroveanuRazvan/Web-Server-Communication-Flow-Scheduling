@@ -9,7 +9,7 @@ use utils::constants::{MAX_CONNECTIONS};
 //netstat -lnp | grep sctp
 fn main() -> Result<()> {
 
-    let ipv4 = SctpServerConfig::ipv4();
+    let addresses = SctpServerConfig::addresses();
     let port = SctpServerConfig::port();
     let server_root = SctpServerConfig::root();
     let outgoing_streams = SctpServerConfig::default_outgoing_streams();
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
 
     let mut server = SctpServerBuilder::new()
         .socket()
-        .address(ipv4)
+        .addresses(addresses.to_vec())
         .port(port)
         .max_connections(MAX_CONNECTIONS)
         .events(events)
@@ -36,7 +36,7 @@ fn main() -> Result<()> {
           .set_events();
 
 
-    println!("Server started and listening on {ipv4:?}:{port}");
+    println!("Server started and listening on {addresses:?}:{port}");
     println!("Current directory: {}",server_root.display());
 
     for stream in server.incoming(){

@@ -10,7 +10,7 @@ static SERVER_CONFIG: OnceLock<SctpServerConfig> = OnceLock::new();
 
 #[derive(Debug,Serialize,Deserialize)]
 pub struct SctpServerConfig {
-    ipv4: Ipv4Addr,
+    addresses: Vec<Ipv4Addr>,
     port: u16,
     root: PathBuf,
     default_outgoing_streams: u16,
@@ -23,7 +23,7 @@ impl Default for SctpServerConfig {
     fn default() -> Self {
 
         Self{
-            ipv4: Ipv4Addr::UNSPECIFIED,
+            addresses: Vec::new(),
             port: 0,
             root: PathBuf::default(),
             default_outgoing_streams: 10,
@@ -47,8 +47,8 @@ impl SctpServerConfig {
 
     }
 
-    pub fn ipv4() -> Ipv4Addr {
-        Self::get_config().ipv4.clone()
+    pub fn addresses() -> &'static [Ipv4Addr] {
+        Self::get_config().addresses.as_slice()
     }
     pub fn port() -> u16 {
         Self::get_config().port.clone()
@@ -71,7 +71,6 @@ impl SctpServerConfig {
 
 
 #[cfg(test)]
-
 mod tests {
 
     use super::*;
@@ -89,7 +88,8 @@ mod tests {
 
         assert_eq!(SctpServerConfig::max_incoming_streams(),10);
         assert_eq!(SctpServerConfig::file_packet_size(),65536);
-        assert_eq!(SctpServerConfig::ipv4(),Ipv4Addr::UNSPECIFIED);
+        assert_eq!(SctpServerConfig::addresses()[0],Ipv4Addr::UNSPECIFIED);
+        assert_eq!(SctpServerConfig::addresses()[1],Ipv4Addr::new(192,168,0,1));
     }
 
 }

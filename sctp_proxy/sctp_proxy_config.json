@@ -1,0 +1,9 @@
+{
+  "addresses": ["127.0.0.1"],
+  "port": 7878,
+  "tcp_address": "0.0.0.0",
+  "cache_path": "/tmp/tmpfs",
+  "download_suffix": ".tmp",
+  "default_outgoing_streams" : 10,
+  "max_incoming_streams": 30
+}

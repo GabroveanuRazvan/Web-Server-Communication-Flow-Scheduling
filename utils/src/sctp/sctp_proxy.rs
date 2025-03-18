@@ -12,15 +12,12 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
 use std::thread::JoinHandle;
 use memmap2::Mmap;
+use crate::config::sctp_proxy_config::SctpProxyConfig;
 use crate::http_parsers::{encode_path, extract_http_paths};
-use crate::constants::{KILOBYTE};
+use crate::constants::{PACKET_BUFFER_SIZE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
 use crate::pools::indexed_thread_pool::IndexedTreadPool;
-
-const BUFFER_SIZE: usize = 64 * KILOBYTE;
-const CACHE_PATH: &str = "/tmp/tmpfs";
-const DOWNLOAD_SUFFIX: &str = ".tmp";
 
 ///Maps each payload protocol id to the requested file name (not encoded).
 static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
@@ -50,7 +47,7 @@ impl SctpProxy{
         println!("Sctp Proxy started and listening on {:?}:{}",self.tcp_address,self.port);
 
         // cache setup
-        create_dir_all(CACHE_PATH)?;
+        create_dir_all(SctpProxyConfig::cache_path())?;
 
         // sctp client setup
         let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
@@ -150,8 +147,8 @@ impl SctpProxy{
                     DOWNLOADED_FILES.write().unwrap().insert(file_path.clone());
                 }
 
-                let cache_file_name = encode_path(&file_path) + DOWNLOAD_SUFFIX;
-                let cache_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
+                let cache_file_name = encode_path(&file_path) + SctpProxyConfig::download_suffix();
+                let cache_file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(&cache_file_name);
 
                 // Insert an entry into the ppid map and processed chunks
                 {
@@ -249,7 +246,7 @@ impl SctpProxy{
             loop{
 
                 // create a new buffer for each request that will be owned by the thread pool
-                let mut buffer = vec![0;BUFFER_SIZE];
+                let mut buffer = vec![0;PACKET_BUFFER_SIZE];
                 match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
                     Err(error) => return Err(From::from(error)),
@@ -307,7 +304,7 @@ impl SctpProxy{
             drop(file_map);
 
             //Rename the file by deleting the download suffix to mark it as finished
-            let cache_file_name = PathBuf::from(&Self::get_file_path(ppid));
+            let cache_file_name = Self::get_file_path(ppid);
             let new_file_name = cache_file_name.with_extension("");
 
             fs::rename(cache_file_name, &new_file_name).unwrap();
@@ -319,14 +316,13 @@ impl SctpProxy{
 
     /// Based on a payload protocol id, retrieves the file request and formats it into a path to be stored.
     ///
-    fn get_file_path(ppid: u32) -> String{
+    fn get_file_path(ppid: u32) -> PathBuf{
 
         // lock the RwLock and read the file name
         let ppid_map = PPID_MAP.read().expect("ppid map lock poisoned");
-        let file_name = encode_path(ppid_map.get(&ppid).unwrap());
+        let file_name = encode_path(ppid_map.get(&ppid).unwrap()) + SctpProxyConfig::download_suffix();
 
-        // get the actual file path
-        let file_path = format!("{}/{}{}", CACHE_PATH, file_name, DOWNLOAD_SUFFIX);
+        let file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(file_name);
 
         file_path
     }

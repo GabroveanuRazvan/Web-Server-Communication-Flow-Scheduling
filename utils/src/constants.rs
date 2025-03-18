@@ -19,3 +19,10 @@ pub const CONFIG_LOAD_ERROR: &str = "Failed to load config file";
 pub const MAX_CONNECTIONS: u16 = 100;
 pub const SERVER_RECEIVE_BUFFER_SIZE: usize = 32 * KILOBYTE;
 
+/// ////////////////////////////
+/// Sctp proxy configuration ///
+/// ////////////////////////////
+
+pub const SCTP_PROXY_CONFIG_PATH_ENV: &str = "SCTP_PROXY_CONFIG_PATH";
+pub const DEFAULT_SCTP_PROXY_CONFIG_PATH: &str = "./sctp_proxy_config.json";
+pub const PACKET_BUFFER_SIZE: usize = 64 * KILOBYTE;
