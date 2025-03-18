@@ -318,10 +318,9 @@ impl SctpProxy{
     ///
     fn get_file_path(ppid: u32) -> PathBuf{
 
-        // lock the RwLock and read the file name
+        // Lock the RwLock and read the file name
         let ppid_map = PPID_MAP.read().expect("ppid map lock poisoned");
         let file_name = encode_path(ppid_map.get(&ppid).unwrap()) + SctpProxyConfig::download_suffix();
-
         let file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(file_name);
 
         file_path

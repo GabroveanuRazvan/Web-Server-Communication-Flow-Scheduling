@@ -112,8 +112,12 @@ impl TcpProxy{
                         // Send the request to the sctp proxy
                         proxy_stream.write_all(file_path_request.as_bytes())?;
 
-                        // Wait to be notified
-                        download_rx.recv().unwrap();
+                        // Check again for the existence of the file in case it was downloaded right before inserting the receiver into the map
+                        if !cache_file_path.exists(){
+                            // Wait to be notified
+                            download_rx.recv().unwrap();
+                        }
+
 
                         // Remove the map entry
                         DOWNLOADING_FILES.write()
