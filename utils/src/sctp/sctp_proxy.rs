@@ -1,6 +1,6 @@
 use std::{fs, io, thread};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, SctpSenderReceiveInfo, MAX_STREAM_NUMBER};
+use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, SctpSenderReceiveInfo};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
 use std::collections::{HashMap, HashSet};
@@ -36,20 +36,24 @@ pub struct SctpProxy{
     port: u16,
     sctp_peer_addresses: Vec<Ipv4Addr>,
     tcp_address: Ipv4Addr,
+
+    sender_sctp_thread: Option<JoinHandle<Result<()>>>,
+    receiver_sctp_thread: Option<JoinHandle<Result<()>>>,
+    prefetch_thread: Option<JoinHandle<Result<()>>>,
 }
 
 impl SctpProxy{
     /// Method that starts the proxy
-    pub fn start(self) -> Result<()>{
+    pub fn start(mut self) -> Result<()>{
 
         let mut tcp_server =TcpListener::bind((self.tcp_address.to_string(),self.port))?;
 
         println!("Sctp Proxy started and listening on {:?}:{}",self.tcp_address,self.port);
 
-        // cache setup
+        // Cache setup
         create_dir_all(SctpProxyConfig::cache_path())?;
 
-        // sctp client setup
+        // Sctp client setup
         let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
 
         let mut sctp_client = SctpStreamBuilder::new()
@@ -65,17 +69,17 @@ impl SctpProxy{
         sctp_client.connect();
         sctp_client.events();
 
-        // channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
+        // Channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();
         let (prefetch_tx, prefetch_rx) = mpsc::channel();
 
         let sender_sctp_stream = sctp_client.try_clone()?;
         let receiver_sctp_stream = sctp_client.try_clone()?;
 
-        // run the sctp client threads
-        Self::sender_sctp_thread(sender_sctp_stream,sctp_rx);
-        Self::receiver_sctp_thread(receiver_sctp_stream,prefetch_tx);
-        Self::prefetch_thread(prefetch_rx,sctp_tx.clone());
+        // Run the sctp client threads
+        self.prefetch_thread = Some(Self::sender_sctp_thread(sender_sctp_stream,sctp_rx));
+        self.receiver_sctp_thread = Some(Self::receiver_sctp_thread(receiver_sctp_stream,prefetch_tx));
+        self.prefetch_thread = Some(Self::prefetch_thread(prefetch_rx,sctp_tx.clone()));
 
         // for each tcp client init a tcp receiver thread
         for stream in tcp_server.incoming(){
@@ -328,7 +332,6 @@ impl SctpProxy{
 
 }
 
-
 /// Builder pattern for SctpProxy
 
 pub struct SctpProxyBuilder{
@@ -378,6 +381,10 @@ impl SctpProxyBuilder {
             port: self.port,
             sctp_peer_addresses: self.sctp_peer_addresses,
             tcp_address: self.tcp_address,
+
+            sender_sctp_thread: None,
+            receiver_sctp_thread: None,
+            prefetch_thread: None,
         }
     }
 }

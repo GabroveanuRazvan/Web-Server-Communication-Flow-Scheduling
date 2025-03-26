@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use std::io::{Read, Result, Write};
+use std::io::{ErrorKind, Read, Result, Write};
 use std::path::{PathBuf};
 use std::sync::{RwLock, LazyLock};
 use crate::constants::KILOBYTE;
@@ -28,6 +28,8 @@ pub struct TcpProxy{
     port: u16,
     tcp_address: Ipv4Addr,
     sctp_proxy_address: SocketAddrV4,
+
+    inotify_thread: Option<JoinHandle<Result<()>>>,
 }
 
 
@@ -35,14 +37,14 @@ impl TcpProxy{
 
     /// Start the proxy by starting a browser server.
     /// For each client connect to the sctp proxy.
-    pub fn start(self) ->Result<()> {
+    pub fn start(mut self) ->Result<()> {
 
         let browser_server = TcpListener::bind(SocketAddrV4::new(self.tcp_address, self.port))?;
         let client_pool = ThreadPool::new(NUM_THREADS);
 
         println!("Listening on {}:{}", self.tcp_address,self.port);
 
-        Self::inotify_thread();
+        self.inotify_thread = Some(Self::inotify_thread());
 
         for mut stream in browser_server.incoming(){
 
@@ -66,6 +68,8 @@ impl TcpProxy{
 
             match stream.read(&mut buffer){
 
+                // The browser closes the connection, just end the function
+                Err(ref error) if error.kind() == ErrorKind::ConnectionReset => break,
                 Err(error) => return Err(error),
 
                 Ok(0) => {
@@ -135,11 +139,21 @@ impl TcpProxy{
                     let http_response = basic_http_response(file_size);
                     let string_response = http_response_to_string(http_response);
 
-                    stream.write_all(string_response.as_bytes())?;
+
+                    // Check for broken pipe error in case the browser abruptly shut down the connection
+                    if let Err(error) = stream.write_all(string_response.as_bytes()){
+                        if error.kind() == ErrorKind::BrokenPipe{
+                            break;
+                        }
+                    }
 
                     for chunk in mmap.chunks(BUFFER_SIZE){
 
-                        stream.write_all(&chunk)?;
+                        if let Err(error) = stream.write_all(&chunk){
+                            if error.kind() == ErrorKind::BrokenPipe{
+                                break;
+                            }
+                        }
 
                     }
 
@@ -257,6 +271,8 @@ impl TcpProxyBuilder{
             port: self.port,
             tcp_address: self.tcp_address,
             sctp_proxy_address: self.sctp_proxy_address,
+
+            inotify_thread: None,
         }
     }
 
