@@ -1,35 +1,33 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use std::io::{ErrorKind, Read, Result, Write};
+use std::io::{Error, ErrorKind, Read, Result, Write};
 use std::path::{PathBuf};
 use std::sync::{RwLock, LazyLock};
 use crate::constants::KILOBYTE;
 use crate::http_parsers::{basic_http_response, encode_path, extract_uri, http_response_to_string};
-use std::sync::mpsc::{channel,Sender };
-use std::{fs, thread};
+use std::sync::mpsc::{channel,Sender,Receiver};
+use std::{thread};
 use std::thread::JoinHandle;
 use inotify::{EventMask, Inotify, WatchMask};
 use memmap2::Mmap;
+use crate::config::sctp_proxy_config::SctpProxyConfig;
 use crate::pools::thread_pool::ThreadPool;
 
-const BUFFER_SIZE: usize = 4 * KILOBYTE;
-const CHUNK_SIZE: usize = 4 * KILOBYTE;
-
-const NUM_THREADS: usize = 6;
+const REQUEST_BUFFER_SIZE: usize = 4 * KILOBYTE;
+const INOTIFY_BUFFER_SIZE: usize = 16 * KILOBYTE;
+const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 
 /// Structure used to store the sender for each thread to be notified about the complete download of the requested file
 static DOWNLOADING_FILES: LazyLock<RwLock<HashMap<PathBuf,Sender<bool>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
-
-const CACHE_PATH: &str = "/tmp/tmpfs";
 
 #[derive(Debug)]
 pub struct TcpProxy{
     port: u16,
     tcp_address: Ipv4Addr,
-    sctp_proxy_address: SocketAddrV4,
 
     inotify_thread: Option<JoinHandle<Result<()>>>,
+    proxy_writer_thread: Option<JoinHandle<Result<()>>>,
 }
 
 
@@ -40,19 +38,21 @@ impl TcpProxy{
     pub fn start(mut self) ->Result<()> {
 
         let browser_server = TcpListener::bind(SocketAddrV4::new(self.tcp_address, self.port))?;
-        let client_pool = ThreadPool::new(NUM_THREADS);
+        let client_pool = ThreadPool::new(SctpProxyConfig::max_browser_connections() as usize);
 
-        println!("Listening on {}:{}", self.tcp_address,self.port);
+        // println!("Listening on {}:{}", self.tcp_address,self.port);
 
+        let (writer_tx,writer_rx) = channel();
         self.inotify_thread = Some(Self::inotify_thread());
+        self.proxy_writer_thread = Some(Self::proxy_writer_thread(writer_rx));
 
         for mut stream in browser_server.incoming(){
 
             let stream = stream?;
-            let proxy_stream = TcpStream::connect(self.sctp_proxy_address)?;
+            let writer_tx = writer_tx.clone();
 
             client_pool.execute(move || {
-                Self::handle_client(stream, proxy_stream).unwrap();
+                Self::handle_client(stream, writer_tx).unwrap();
             })
         }
 
@@ -60,9 +60,9 @@ impl TcpProxy{
     }
 
     /// Method used to handle the connection of each client.
-    pub fn handle_client(mut stream: TcpStream,mut proxy_stream: TcpStream) -> Result<()>{
+    pub fn handle_client(mut stream: TcpStream,writer_tx: Sender<String>) -> Result<()>{
 
-        let mut buffer = vec![0; BUFFER_SIZE];
+        let mut buffer = vec![0; REQUEST_BUFFER_SIZE];
 
         loop{
 
@@ -73,7 +73,7 @@ impl TcpProxy{
                 Err(error) => return Err(error),
 
                 Ok(0) => {
-                    println!("Browser connection closed.");
+                    // println!("Browser connection closed.");
                     break;
                 }
 
@@ -84,7 +84,7 @@ impl TcpProxy{
                     let new_line_position = buffer.iter().position(|&b| b == b'\n').unwrap();
                     let request_line = String::from_utf8_lossy(&buffer[..new_line_position]).to_string();
 
-                    println!("Request: {}", request_line);
+                    // println!("Request: {}", request_line);
 
                     // Get the server-side file name, the cache side file name and path
                     let file_name = extract_uri(request_line).unwrap();
@@ -98,10 +98,10 @@ impl TcpProxy{
                     };
 
                     let cache_file_name = encode_path(&file_name);
-                    let cache_file_path = PathBuf::from(CACHE_PATH).join(&cache_file_name);
+                    let cache_file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(&cache_file_name);
                     let file_path_request = format!("{}\n",file_name);
 
-                    println!("Request: {}", file_path_request);
+                    // println!("Request: {}", file_path_request);
 
                     // If the requested file does not exist in the cache, send a request to the SCTP proxy, and wait for the file to be downloaded
                     if !cache_file_path.exists(){
@@ -114,7 +114,9 @@ impl TcpProxy{
                                          .insert(PathBuf::from(cache_file_name),download_tx);
 
                         // Send the request to the sctp proxy
-                        proxy_stream.write_all(file_path_request.as_bytes())?;
+                        writer_tx.send(file_path_request).map_err(
+                            |e| Error::new(ErrorKind::Other,format!("Error sending file request: {}",e))
+                        )?;
 
                         // Check again for the existence of the file in case it was downloaded right before inserting the receiver into the map
                         if !cache_file_path.exists(){
@@ -147,7 +149,7 @@ impl TcpProxy{
                         }
                     }
 
-                    for chunk in mmap.chunks(BUFFER_SIZE){
+                    for chunk in mmap.chunks(BROWSER_CHUNK_SIZE){
 
                         if let Err(error) = stream.write_all(&chunk){
                             if error.kind() == ErrorKind::BrokenPipe{
@@ -179,12 +181,12 @@ impl TcpProxy{
         inotify
             .watches()
             .add(
-                CACHE_PATH,
+                SctpProxyConfig::cache_path(),
                 WatchMask::MOVED_TO,
             )
             .expect("Failed to add file watch");
 
-        let mut events_buffer = vec![0u8; BUFFER_SIZE];
+        let mut events_buffer = vec![0u8; INOTIFY_BUFFER_SIZE];
 
         // Spawn a thread that reads in a loop the events
         thread::spawn(move || {
@@ -222,21 +224,35 @@ impl TcpProxy{
 
     }
 
+    /// Receives sctp-proxy requests through the channel and writes them to the standard output for the proxy to process.
+    pub fn proxy_writer_thread(writer_rx: Receiver<String>) -> JoinHandle<Result<()>>{
+
+        let mut stdout = std::io::stdout();
+
+        thread::spawn(move || {
+
+            for request in writer_rx{
+                stdout.write_all(request.as_bytes())?;
+            }
+
+            Ok(())
+        })
+
+    }
+
 }
 
 /// Builder pattern used for the TCP Proxy.
 pub struct TcpProxyBuilder{
     port: u16,
     tcp_address: Ipv4Addr,
-    sctp_proxy_address: SocketAddrV4,
 }
 
 impl TcpProxyBuilder{
     pub fn new() -> Self{
         Self{
-            port: 7878,
+            port: 0,
             tcp_address: Ipv4Addr::UNSPECIFIED,
-            sctp_proxy_address: SocketAddrV4::new(Ipv4Addr::UNSPECIFIED,7979),
         }
     }
 
@@ -250,29 +266,14 @@ impl TcpProxyBuilder{
         self
     }
 
-    pub fn sctp_proxy_address(mut self, sctp_proxy_address: SocketAddrV4) -> Self{
-        self.sctp_proxy_address = sctp_proxy_address;
-        self
-    }
-
-    pub fn sctp_proxy_ipv4(mut self, sctp_proxy_ipv4: Ipv4Addr) -> Self{
-        self.sctp_proxy_address.set_ip(sctp_proxy_ipv4);
-        self
-    }
-
-    pub fn sctp_proxy_port(mut self,sctp_proxy_port: u16) -> Self{
-        self.sctp_proxy_address.set_port(sctp_proxy_port);
-        self
-    }
-
     pub fn build(self) -> TcpProxy{
 
         TcpProxy{
             port: self.port,
             tcp_address: self.tcp_address,
-            sctp_proxy_address: self.sctp_proxy_address,
 
             inotify_thread: None,
+            proxy_writer_thread: None,
         }
     }
 

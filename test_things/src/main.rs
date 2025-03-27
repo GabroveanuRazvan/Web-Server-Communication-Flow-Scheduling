@@ -1,12 +1,17 @@
-
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
-use std::io::Write;
-use utils::config::sctp_server_config::{SctpServerConfig};
-use utils::sctp::sctp_client::SctpStream;
-use utils::sctp::sctp_server::SctpServer;
 
-fn main() {
+fn main(){
+
+    let child = Command::new("../tcp_cache_fetcher_proxy/target/debug/tcp_cache_fetcher_proxy")
+        .stdout(Stdio::piped())
+        .spawn().unwrap();
+
+    let reader = BufReader::new(child.stdout.unwrap());
+
+    for line in reader.lines() {
+        println!("{}", line.unwrap());
+    }
 
 }
-
 

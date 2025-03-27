@@ -11,12 +11,16 @@ static SCTP_PROXY_CONFIG: OnceLock<SctpProxyConfig> = OnceLock::new();
 #[derive(Debug,Serialize,Deserialize)]
 pub struct SctpProxyConfig{
     addresses: Vec<Ipv4Addr>,
-    port: u16,
-    tcp_address: Ipv4Addr,
+    sctp_port: u16,
     cache_path: PathBuf,
     download_suffix: String,
     default_outgoing_streams: u16,
     max_incoming_streams: u16,
+
+    browser_child_exec_path: PathBuf,
+    browser_server_port: u16,
+    browser_server_address: Ipv4Addr,
+    max_browser_connections: u16,
 }
 
 impl SctpProxyConfig {
@@ -43,14 +47,9 @@ impl SctpProxyConfig {
         Self::get_config().addresses.as_slice()
     }
 
-    pub fn port() -> u16{
-        Self::get_config().port
+    pub fn sctp_port() -> u16{
+        Self::get_config().sctp_port
     }
-
-    pub fn tcp_address() -> &'static Ipv4Addr{
-        &Self::get_config().tcp_address
-    }
-
     pub fn cache_path() -> &'static Path {
         Self::get_config().cache_path.as_path()
     }
@@ -64,6 +63,18 @@ impl SctpProxyConfig {
     pub fn max_incoming_streams() -> u16 {
         Self::get_config().max_incoming_streams
     }
+
+    pub fn browser_child_exec_path() -> &'static Path {
+        Self::get_config().browser_child_exec_path.as_path()
+    }
+
+    pub fn browser_server_port() -> u16{
+        Self::get_config().browser_server_port
+    }
+    pub fn browser_server_address() -> &'static Ipv4Addr {
+        &Self::get_config().browser_server_address
+    }
+    pub fn max_browser_connections() -> u16 {Self::get_config().max_browser_connections}
 
 }
 
@@ -84,8 +95,7 @@ mod tests {
         let config = SctpProxyConfig::get_config();
 
         assert_eq!(SctpProxyConfig::addresses().len(), 1);
-        assert_eq!(SctpProxyConfig::port(),7878);
-        assert_eq!(*SctpProxyConfig::tcp_address(),Ipv4Addr::UNSPECIFIED);
+        assert_eq!(SctpProxyConfig::sctp_port(),7878);
         assert_eq!(SctpProxyConfig::cache_path(),PathBuf::from("/tmp/tmpfs"));
         assert_eq!(SctpProxyConfig::download_suffix(),".tmp");
         assert_eq!(SctpProxyConfig::default_outgoing_streams(),10);

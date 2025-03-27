@@ -8,6 +8,7 @@ use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std::num::NonZero;
 use std::path::{PathBuf};
+use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
 use std::thread::JoinHandle;
@@ -35,20 +36,22 @@ static DOWNLOADED_FILES: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| Rw
 pub struct SctpProxy{
     port: u16,
     sctp_peer_addresses: Vec<Ipv4Addr>,
-    tcp_address: Ipv4Addr,
 
+    tcp_child: Option<Child>,
     sender_sctp_thread: Option<JoinHandle<Result<()>>>,
     receiver_sctp_thread: Option<JoinHandle<Result<()>>>,
     prefetch_thread: Option<JoinHandle<Result<()>>>,
+    tcp_child_reader_thread: Option<JoinHandle<Result<()>>>,
 }
 
 impl SctpProxy{
     /// Method that starts the proxy
     pub fn start(mut self) -> Result<()>{
 
-        let mut tcp_server =TcpListener::bind((self.tcp_address.to_string(),self.port))?;
-
-        println!("Sctp Proxy started and listening on {:?}:{}",self.tcp_address,self.port);
+        // Check the validity of the executable path
+        if !SctpProxyConfig::browser_child_exec_path().exists(){
+            panic!("Browser connection executable path does not exist");
+        }
 
         // Cache setup
         create_dir_all(SctpProxyConfig::cache_path())?;
@@ -69,6 +72,17 @@ impl SctpProxy{
         sctp_client.connect();
         sctp_client.events();
 
+        // Browser child setup
+        self.tcp_child = Some(
+            Command::new(SctpProxyConfig::browser_child_exec_path())
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("Failed to spawn browser connection child")
+        );
+
+        println!("Browser connection child started!");
+
+
         // Channel used to communicate between multiple tcp receiver threads and the transmitter sctp thread
         let (sctp_tx,sctp_rx) = mpsc::channel();
         let (prefetch_tx, prefetch_rx) = mpsc::channel();
@@ -81,40 +95,25 @@ impl SctpProxy{
         self.receiver_sctp_thread = Some(Self::receiver_sctp_thread(receiver_sctp_stream,prefetch_tx));
         self.prefetch_thread = Some(Self::prefetch_thread(prefetch_rx,sctp_tx.clone()));
 
-        // for each tcp client init a tcp receiver thread
-        for stream in tcp_server.incoming(){
-
-            let stream = stream?;
-            Self::receiver_tcp_thread(stream,sctp_tx.clone());
-
-        }
+        // The main thread becomes the bridge between the child and the sctp proxy
+        let child_stdout = self.tcp_child.unwrap().stdout.take().unwrap();
+        Self::get_browser_requests(child_stdout,sctp_tx)?;
 
         Ok(())
     }
 
-    /// Tcp receiver thread that reads incoming request and sends them to be forwarded by the sctp sender thread.
-    ///
-    fn receiver_tcp_thread(tcp_stream: TcpStream, sctp_tx: Sender<String>) -> JoinHandle<Result<()>>{
+    fn get_browser_requests(stdout: ChildStdout, sctp_tx: Sender<String>) -> Result<()>{
 
-        let reader = BufReader::new(tcp_stream);
+        let reader = BufReader::new(stdout);
 
-        thread::spawn(move || {
+        for request in reader.lines(){
+            let request = request?;
+            sctp_tx.send(request).map_err(
+                |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
+            )?;
+        }
 
-            for line in reader.lines(){
-
-                let request = line?;
-
-                sctp_tx.send(request).map_err(
-                    |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
-                )?;
-
-            }
-
-            println!("Tcp connection closed!");
-            Ok(())
-
-        })
-
+        Ok(())
     }
 
     /// Sctp thread that sends incoming requests to the server to be processed.
@@ -338,7 +337,6 @@ pub struct SctpProxyBuilder{
 
     port: u16,
     sctp_peer_addresses: Vec<Ipv4Addr>,
-    tcp_address: Ipv4Addr,
 }
 
 impl SctpProxyBuilder {
@@ -349,7 +347,6 @@ impl SctpProxyBuilder {
         Self{
             port: 0,
             sctp_peer_addresses: vec![],
-            tcp_address: Ipv4Addr::new(0, 0, 0, 0),
         }
     }
 
@@ -367,24 +364,18 @@ impl SctpProxyBuilder {
         self
     }
 
-    /// Sets the address that the tcp server will listen to
-    pub fn tcp_address(mut self, address: Ipv4Addr) -> Self {
-
-        self.tcp_address = address;
-        self
-    }
-
     /// Builds the proxy based on the given data
     pub fn build(self) -> SctpProxy{
 
         SctpProxy{
             port: self.port,
             sctp_peer_addresses: self.sctp_peer_addresses,
-            tcp_address: self.tcp_address,
 
+            tcp_child: None,
             sender_sctp_thread: None,
             receiver_sctp_thread: None,
             prefetch_thread: None,
+            tcp_child_reader_thread: None,
         }
     }
 }
