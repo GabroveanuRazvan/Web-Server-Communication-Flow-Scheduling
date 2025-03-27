@@ -216,6 +216,7 @@ impl SctpProxy{
 
                 // Send the file requests to the sctp sender
                 for file_name in prefetched_file_names{
+
                     sctp_tx.send(file_name).map_err(
                         |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
                     )?;

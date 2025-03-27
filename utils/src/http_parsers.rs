@@ -159,42 +159,41 @@ pub fn basic_http_get_request(uri: &str) -> Request<()> {
 /// Parses the html file and extracts all afferent paths from href and src selectors.
 pub fn extract_http_paths(html_content: &str) -> Vec<String> {
 
-    // parse the html document
+    // Parse the html document
     let document = Html::parse_document(&html_content);
 
-    // prepare selectors for href and src
-    let href_selector = Selector::parse("[href]").unwrap();
-    let src_selector = Selector::parse("[src]").unwrap();
+    // Prepare the selectors
+    let selectors: [(Selector,&str);2] = [
+        (Selector::parse("[href]").unwrap(),"href"),
+        (Selector::parse("[src]").unwrap(),"src"),
+    ];
 
     let mut paths =  Vec::new();
 
-    for element in document.select(&href_selector) {
-        if let Some(href) = element.value().attr("href") {
+    for (selector,attribute) in selectors{
 
-            let path = href.to_string();
+        for element in document.select(&selector) {
 
-            // Skip link paths
-            if path.starts_with("https"){
-               continue;
+            if let Some(href) = element.value().attr(attribute) {
+
+                let mut path = href.to_string();
+
+                // Skip link paths
+                if path.starts_with("https"){
+                    continue;
+                }
+
+                // Add / to path for consistency
+                if !path.starts_with('/'){
+                    path = format!("/{}",path);
+                }
+
+                paths.push(path);
             }
 
-            paths.push(path);
         }
+
     }
-
-    for element in document.select(&src_selector) {
-        if let Some(src) = element.value().attr("src") {
-
-            let path = src.to_string();
-
-            if path.starts_with("https"){
-                continue;
-            }
-
-            paths.push(path);
-        }
-    }
-
     paths
 }
 
