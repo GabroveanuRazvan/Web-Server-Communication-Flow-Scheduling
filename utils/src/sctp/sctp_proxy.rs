@@ -241,10 +241,12 @@ impl SctpProxy{
 
         thread::spawn(move || {
 
-            // init a new thread pool that will download the files
+            // Init a new thread pool that will download the files
             let mut sender_info = SctpSenderReceiveInfo::new();
-            let num_cpus = thread::available_parallelism().unwrap_or(NonZero::new(6).unwrap()).get();
-            let mut download_pool = IndexedTreadPool::new(num_cpus);
+
+            // The number of workers will be equal to the incoming stream count of the sctp association
+            let incoming_stream_count = sctp_client.get_sctp_status().sstat_instrms;
+            let mut download_pool = IndexedTreadPool::new(incoming_stream_count as usize);
 
             loop{
 
