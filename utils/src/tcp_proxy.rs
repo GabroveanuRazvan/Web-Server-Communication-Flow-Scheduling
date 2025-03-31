@@ -159,6 +159,12 @@ impl TcpProxy{
 
                     }
 
+                    if let Err(error) = stream.write_all(b"\r\n"){
+                        if error.kind() == ErrorKind::BrokenPipe{
+                            break;
+                        }
+                    }
+
                 }
 
             }
