@@ -41,9 +41,9 @@ growth_rate = 1.01
 save_path = "./images"
 
 # Sorted, non overlapping intervals
-intervals = [(1 * KILOBYTE, 5 * KILOBYTE),
-             (10 * KILOBYTE, 20 * KILOBYTE),
-             (50 * KILOBYTE, 100 * KILOBYTE),
+intervals = [(5 * KILOBYTE, 10 * KILOBYTE),
+             (30 * KILOBYTE, 50 * KILOBYTE),
+             (100 * KILOBYTE, 300 * KILOBYTE),
              (1 * MEGABYTE, 5 * MEGABYTE)]
 
 

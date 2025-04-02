@@ -1,26 +1,29 @@
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::io::{Error, ErrorKind, Read, Result, Write};
 use std::path::{PathBuf};
-use std::sync::{RwLock, LazyLock};
+use std::sync::{RwLock, LazyLock, Condvar, Mutex, Arc};
 use crate::constants::KILOBYTE;
 use crate::http_parsers::{basic_http_response, encode_path, extract_uri, http_response_to_string};
 use std::sync::mpsc::{channel,Sender,Receiver};
 use std::{thread};
 use std::thread::JoinHandle;
 use inotify::{EventMask, Inotify, WatchMask};
+use libc::clone;
 use memmap2::Mmap;
 use crate::config::sctp_proxy_config::SctpProxyConfig;
+use crate::logger::Logger;
 use crate::pools::thread_pool::ThreadPool;
 
 const REQUEST_BUFFER_SIZE: usize = 4 * KILOBYTE;
 const INOTIFY_BUFFER_SIZE: usize = 16 * KILOBYTE;
 const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 
-/// Structure used to store the sender for each thread to be notified about the complete download of the requested file
-static DOWNLOADING_FILES: LazyLock<RwLock<HashMap<PathBuf,Sender<bool>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
-
+/// Maps each cache file name to a reference count mutex and condvar
+/// Used to signal multiple waiting threads for requested files
+static DOWNLOADING_FILES: LazyLock<RwLock<HashMap<String,Arc<(Mutex<bool>,Condvar)>>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+static LOGGER: LazyLock<Logger> = LazyLock::new(|| Logger::new("/tmp/tcp_stdout").unwrap());
 #[derive(Debug)]
 pub struct TcpProxy{
     port: u16,
@@ -73,7 +76,6 @@ impl TcpProxy{
                 Err(error) => return Err(error),
 
                 Ok(0) => {
-                    // println!("Browser connection closed.");
                     break;
                 }
 
@@ -83,8 +85,6 @@ impl TcpProxy{
                     // Extract the first line of the request
                     let new_line_position = buffer.iter().position(|&b| b == b'\n').unwrap();
                     let request_line = String::from_utf8_lossy(&buffer[..new_line_position]).to_string();
-
-                    // println!("Request: {}", request_line);
 
                     // Get the server-side file name, the cache side file name and path
                     let file_name = extract_uri(request_line).unwrap();
@@ -101,34 +101,48 @@ impl TcpProxy{
                     let cache_file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(&cache_file_name);
                     let file_path_request = format!("{}\n",file_name);
 
-                    // println!("Request: {}", file_path_request);
-
                     // If the requested file does not exist in the cache, send a request to the SCTP proxy, and wait for the file to be downloaded
                     if !cache_file_path.exists(){
 
-                        let (download_tx,download_rx) = channel();
-
-                        // Insert into the map the sender so that the thread can be notified
-                        DOWNLOADING_FILES.write()
-                                         .unwrap()
-                                         .insert(PathBuf::from(cache_file_name),download_tx);
+                        // LOGGER.writeln(format!("Cache  miss: {}",cache_file_path.display()).as_str());
 
                         // Send the request to the sctp proxy
                         writer_tx.send(file_path_request).map_err(
                             |e| Error::new(ErrorKind::Other,format!("Error sending file request: {}",e))
                         )?;
 
-                        // Check again for the existence of the file in case it was downloaded right before inserting the receiver into the map
-                        if !cache_file_path.exists(){
-                            // Wait to be notified
-                            download_rx.recv().unwrap();
+                        // Get the lock and condvar entry
+                        let lock_entry = {
+
+                            {
+                                // First, try to get the entry via a read lock
+                                let read_guard = DOWNLOADING_FILES.read().unwrap();
+                                match read_guard.get(&cache_file_name){
+                                    None => {
+                                        // If the entry does not exist, drop the read lock and create the entry via a write lock
+                                        drop(read_guard);
+                                        let mut map_guard = DOWNLOADING_FILES.write().unwrap();
+                                        map_guard.entry(cache_file_name.clone())
+                                            .or_insert_with(|| Arc::new((Mutex::new(false),Condvar::new())))
+                                            .clone()
+
+                                    }
+                                    Some(entry) => Arc::clone(entry)
+                                }
+                            }
+
+                        };
+
+
+                        let (lock,cvar) = &*lock_entry;
+                        let mut ready = lock.lock().unwrap();
+
+                        // As the entry is obtained, block the thread if the file is not ready, otherwise break the loop
+                        while !*ready {
+                            ready = cvar.wait(ready).unwrap();
                         }
+                        // LOGGER.writeln(format!("Exit cvar {}",cache_file_path.display()).as_str());
 
-
-                        // Remove the map entry
-                        DOWNLOADING_FILES.write()
-                                         .unwrap()
-                                         .remove(&cache_file_path);
                     }
 
                     // Send the file to the client in chunks
@@ -215,8 +229,17 @@ impl TcpProxy{
                         // Retrieve the transmitter and send a signal
                         let download_map = DOWNLOADING_FILES.read().unwrap();
 
-                        if let Some(sender) = download_map.get(&PathBuf::from(&file_name)){
-                            sender.send(true).expect(format!("Error while sending file: {}", file_name).as_str());
+                        // LOGGER.writeln(format!("Inotify {}",file_name).as_str());
+
+                        match download_map.get(&file_name){
+                            None => (),
+                            Some(lock_entry) => {
+                                let lock_entry = Arc::clone(lock_entry);
+                                let (lock,cvar) = &*lock_entry;
+                                let mut ready = lock.lock().unwrap();
+                                *ready = true;
+                                cvar.notify_all();
+                            }
                         }
 
 
