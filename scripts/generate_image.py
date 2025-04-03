@@ -38,7 +38,7 @@ width = 25
 
 growth_rate = 1.01
 
-save_path = "./images"
+save_path = "./benchmark_dataset"
 
 # Sorted, non overlapping intervals
 intervals = [(5 * KILOBYTE, 10 * KILOBYTE),
