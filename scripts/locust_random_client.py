@@ -1,5 +1,3 @@
-import sys
-
 from locust import HttpUser, task, between
 import os
 import numpy as np
