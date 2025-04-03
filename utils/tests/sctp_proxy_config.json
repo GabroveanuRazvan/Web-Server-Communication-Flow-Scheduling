@@ -1,9 +1,13 @@
 {
   "addresses": ["127.0.0.1"],
-  "port": 7878,
-  "tcp_address": "0.0.0.0",
+  "sctp_port": 7878,
   "cache_path": "/tmp/tmpfs",
   "download_suffix": ".tmp",
   "default_outgoing_streams" : 10,
-  "max_incoming_streams": 30
+  "max_incoming_streams": 30,
+
+  "browser_child_exec_path": "../tcp_cache_fetcher_proxy/target/debug/tcp_cache_fetcher_proxy",
+  "browser_server_port": 7878,
+  "browser_server_address": "0.0.0.0",
+  "max_browser_connections": 6
 }

@@ -21,6 +21,7 @@ pub mod packets{
     pub mod byte_packet;
     pub mod chunk_type;
     pub mod file_packet_error;
+    pub mod status_code;
 }
 
 pub mod config{
