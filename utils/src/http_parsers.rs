@@ -183,11 +183,6 @@ pub fn extract_http_paths(html_content: &str) -> Vec<String> {
                     continue;
                 }
 
-                // Add / to path for consistency
-                if !path.starts_with('/'){
-                    path = format!("/{}",path);
-                }
-
                 paths.push(path);
             }
 

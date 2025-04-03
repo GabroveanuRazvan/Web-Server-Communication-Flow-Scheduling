@@ -7,14 +7,15 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std::num::NonZero;
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, LazyLock, Mutex, RwLock};
 use std::thread::JoinHandle;
 use memmap2::Mmap;
+use path_clean::PathClean;
 use crate::config::sctp_proxy_config::SctpProxyConfig;
-use crate::http_parsers::{encode_path, extract_http_paths};
+use crate::http_parsers::{decode_path, encode_path, extract_http_paths};
 use crate::constants::{PACKET_BUFFER_SIZE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
@@ -102,12 +103,12 @@ impl SctpProxy{
         Ok(())
     }
 
-    fn get_browser_requests(stdout: ChildStdout, sctp_tx: Sender<String>) -> Result<()>{
+    fn get_browser_requests(stdout: ChildStdout, sctp_tx: Sender<PathBuf>) -> Result<()>{
 
         let reader = BufReader::new(stdout);
 
         for request in reader.lines(){
-            let request = request?;
+            let request = PathBuf::from(request?);
             sctp_tx.send(request).map_err(
                 |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
             )?;
@@ -119,7 +120,7 @@ impl SctpProxy{
     /// Sctp thread that sends incoming requests to the server to be processed.
     /// Each request is mapped to a unique ppid value.
     ///
-    fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<String>) -> JoinHandle<Result<()>>{
+    fn sender_sctp_thread(sctp_client: SctpStream, sctp_rx: Receiver<PathBuf>) -> JoinHandle<Result<()>>{
 
         println!("Sctp sender thread started!");
 
@@ -132,6 +133,8 @@ impl SctpProxy{
             let mut current_ppid = 0;
 
             for path in sctp_rx {
+
+                let path = String::from(path.to_str().unwrap());
 
                 let file_path = match path.trim() {
                     "/" => "/index.html".to_string(),
@@ -187,14 +190,14 @@ impl SctpProxy{
 
 
     /// Thread that receives the paths of downloaded files. Parses the html files in order to make requests in advance, before the browser does.
-    fn prefetch_thread(prefetch_rx: Receiver<PathBuf>, sctp_tx: Sender<String>) -> JoinHandle<Result<()>> {
+    fn prefetch_thread(prefetch_rx: Receiver<PathBuf>, sctp_tx: Sender<PathBuf>) -> JoinHandle<Result<()>> {
 
         thread::spawn(move || {
 
-            for file_name in prefetch_rx{
+            for file_path in prefetch_rx{
 
                 // Check the file extension
-                if let Some(extension) = file_name.extension(){
+                if let Some(extension) = file_path.extension(){
                     if extension != "html"{
                         continue;
                     }
@@ -208,16 +211,30 @@ impl SctpProxy{
                     .read(true)
                     .create(false)
                     .truncate(false)
-                    .open(&file_name).expect("Could not open file to prefetch");
+                    .open(&file_path).expect("Could not open file to prefetch");
+
 
                 let mmap = unsafe{Mmap::map(&file).unwrap()};
                 let file_content = String::from_utf8_lossy(&mmap);
                 let prefetched_file_names = extract_http_paths(&file_content);
 
+                // Need to resolve each prefetched paths
+                let server_path = file_path.strip_prefix(SctpProxyConfig::cache_path())
+                    .unwrap()
+                    .as_os_str()
+                    .to_str()
+                    .unwrap();
+
+                // Get the parent of this html file in server side format
+                let decoded_server_path = PathBuf::from(decode_path(server_path));
+                let parent_path = decoded_server_path.parent().unwrap();
+
                 // Send the file requests to the sctp sender
                 for file_name in prefetched_file_names{
+                    // Join the parent of this html file with the file to be prefetched and clean the path
+                    let file_path = parent_path.join(file_name).clean();
 
-                    sctp_tx.send(file_name).map_err(
+                    sctp_tx.send(file_path).map_err(
                         |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
                     )?;
                 }

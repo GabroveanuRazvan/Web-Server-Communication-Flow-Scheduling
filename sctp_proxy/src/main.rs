@@ -1,4 +1,3 @@
-use std::net::{Ipv4Addr};
 use std::{io};
 use utils::sctp::sctp_api::{SctpPeerBuilder};
 use utils::sctp::sctp_proxy::SctpProxyBuilder;

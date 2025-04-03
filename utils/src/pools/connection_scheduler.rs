@@ -102,15 +102,18 @@ impl ConnectionScheduler{
                 .write(true)
                 .create(false)
                 .truncate(false)
-                .open(path);
+                .open(&path);
 
-            let file = file.unwrap_or_else(|_|
+            let file = file.unwrap_or_else(|_|{
+                println!("Not exists: {}",path);
                 OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(false)
-                .truncate(false)
-                .open("./404.html").unwrap()
+                    .read(true)
+                    .write(true)
+                    .create(false)
+                    .truncate(false)
+                    .open("./404.html").unwrap()
+            }
+
             );
 
             let mapped_file = MappedFile::new(file).unwrap();
