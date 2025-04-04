@@ -1,0 +1,15 @@
+services:
+  locust:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: locust
+    tty: true
+    ports:
+      - "8089:8089/tcp"
+    volumes:
+      - ./locust_benchmark_scripts:/locust/locust_benchmark_scripts
+      - ./benchmark_dataset:/locust/benchmark_dataset
+      - ./results:/locust/results
+#    command:
+#      - locust -f locust_benchmark_scripts/locust_random_client.py --csv /locust/results/results

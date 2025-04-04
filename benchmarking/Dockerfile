@@ -1,0 +1,14 @@
+FROM python:3.13.2-slim
+
+WORKDIR /locust
+
+COPY requirements.txt .
+COPY locust_benchmark_scripts ./locust_benchmark_scripts
+COPY benchmark_dataset ./benchmark_dataset
+RUN mkdir results
+
+
+EXPOSE 8089/tcp
+RUN pip install -r requirements.txt
+
+CMD locust -f locust_benchmark_scripts/locust_random_client.py --csv /locust/results/results
