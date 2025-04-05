@@ -6,11 +6,13 @@ use std::path::Path;
 use crate::constants::SERVER_RECEIVE_BUFFER_SIZE;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG};
 use crate::config::sctp_server_config::SctpServerConfig;
-use crate::pools::connection_scheduler;
+use crate::pools::scheduling::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, SctpPeerBuilder, SctpInitMsg};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, safe_getsockopt, safe_close, CStruct};
-use crate::pools::connection_scheduler::ConnectionScheduler;
+use crate::pools::scheduling::connection_scheduler::ConnectionScheduler;
+use crate::pools::scheduling::round_robin_scheduler::RoundRobinScheduler;
+use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 
 #[derive(Debug)]
 pub struct SctpServer {
@@ -105,11 +107,47 @@ impl SctpServer{
 
         println!("New client!");
         println!("Client address: {:?}", stream.local_address());
+        println!("Scheduler used: {:?}", SctpServerConfig::scheduling_policy());
 
         let file_packet_size = SctpServerConfig::file_packet_size();
-        let mut scheduler = ConnectionScheduler::new(self.outgoing_stream_count,stream,SERVER_RECEIVE_BUFFER_SIZE,file_packet_size);
 
-        scheduler.start();
+        match SctpServerConfig::scheduling_policy() {
+
+            SchedulingPolicy::RoundRobin => {
+                let mut scheduler = RoundRobinScheduler::new(self.outgoing_stream_count,
+                                                             stream,
+                                                             SERVER_RECEIVE_BUFFER_SIZE,
+                                                             file_packet_size);
+                scheduler.start();
+            },
+
+            SchedulingPolicy::ShortestConnectionFirst => {
+                let mut scheduler = ConnectionScheduler::new(self.outgoing_stream_count,
+                                                             stream,
+                                                             SERVER_RECEIVE_BUFFER_SIZE,
+                                                             file_packet_size);
+                scheduler.start();
+            },
+
+            SchedulingPolicy::Unknown(val) => panic!("Unknown scheduling policy: {val}"),
+
+        }
+
+        Ok(())
+    }
+
+    /// Starts listening for clients and consumes the server.
+    pub fn start(mut self) -> Result<()>{
+
+        println!("Server started and listening on {:?}:{:?}",self.addresses,self.port);
+        println!("Current directory: {}",SctpServerConfig::root().display());
+
+        for stream in self.incoming(){
+
+            let stream = stream?;
+            self.handle_client(stream)?
+
+        }
 
         Ok(())
     }

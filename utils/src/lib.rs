@@ -6,8 +6,13 @@ pub mod sctp{
 }
 
 pub mod pools{
-    pub mod shortest_job_first_pool;
-    pub mod connection_scheduler;
+
+    pub mod scheduling{
+        pub mod shortest_job_first_pool;
+        pub mod connection_scheduler;
+        pub mod round_robin_scheduler;
+        pub mod scheduling_policy;
+    }
     pub mod thread_pool;
     pub mod indexed_thread_pool;
 }

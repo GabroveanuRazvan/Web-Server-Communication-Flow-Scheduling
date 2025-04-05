@@ -6,17 +6,10 @@ use utils::logger::Logger;
 
 fn main(){
 
-    // let a = PathBuf::from("/a/b");
-    // let b = PathBuf::from("../d/e");
-    //
-    // let c = a.parent().unwrap().join(b);
-    // println!("{:?}",c);
-    // println!("{:?}",c.clean());
+    let mut x = 255u8;
 
-
-    let a = PathBuf::from("/a");
-    let b = PathBuf::from("/b");
-    println!("{:?}",a.join(b))
+    x = x.wrapping_add(2);
+    println!("{}",x);
 
 }
 

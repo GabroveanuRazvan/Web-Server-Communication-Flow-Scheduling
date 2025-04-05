@@ -21,6 +21,8 @@
       <excludeFolder url="file://$MODULE_DIR$/test_things/target" />
       <excludeFolder url="file://$MODULE_DIR$/tcp_cache_fetcher_proxy/target" />
       <excludeFolder url="file://$MODULE_DIR$/test_things/mytmpfs" />
+      <excludeFolder url="file://$MODULE_DIR$/benchmarking/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/scripts/.idea" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

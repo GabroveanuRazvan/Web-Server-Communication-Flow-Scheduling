@@ -36,15 +36,7 @@ fn main() -> Result<()> {
           .set_events();
 
 
-    println!("Server started and listening on {addresses:?}:{port}");
-    println!("Current directory: {}",server_root.display());
-
-    for stream in server.incoming(){
-
-        let stream = stream?;
-        server.handle_client(stream)?
-
-    }
+    server.start()?;
 
 
 

@@ -19,7 +19,7 @@ use crate::http_parsers::{decode_path, encode_path, extract_http_paths};
 use crate::constants::{PACKET_BUFFER_SIZE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
-use crate::pools::indexed_thread_pool::IndexedTreadPool;
+use crate::pools::indexed_thread_pool::IndexedThreadPool;
 
 ///Maps each payload protocol id to the requested file name (not encoded).
 static PPID_MAP: LazyLock<RwLock<HashMap<u32,String>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
@@ -264,7 +264,7 @@ impl SctpProxy{
 
             // The number of workers will be equal to the incoming stream count of the sctp association
             let incoming_stream_count = sctp_client.get_sctp_status().sstat_instrms;
-            let mut download_pool = IndexedTreadPool::new(incoming_stream_count as usize);
+            let mut download_pool = IndexedThreadPool::new(incoming_stream_count as usize);
 
             loop{
 

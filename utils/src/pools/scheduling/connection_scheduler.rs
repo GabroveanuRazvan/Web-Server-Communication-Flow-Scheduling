@@ -4,18 +4,14 @@ use std::fs::OpenOptions;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use crate::constants::BYTE;
 use crate::libc_wrappers::CStruct;
 use crate::mapped_file::{MappedFile};
 use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_api::SctpSenderReceiveInfo;
 use crate::sctp::sctp_client::SctpStream;
-
-
-const PACKET_METADATA_SIZE: usize = 4 * BYTE;
+use crate::constants::PACKET_METADATA_SIZE;
 
 /// Shortest Job First scheduler for a Sctp Stream.
-///
 pub struct ConnectionScheduler{
 
     heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,u32)>>>>,Condvar)>,
@@ -28,17 +24,16 @@ pub struct ConnectionScheduler{
 
 impl ConnectionScheduler{
 
-    /// Creates a worker pool of size and takes a Sctp Stream.
-    ///
-    pub fn new(size: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
-        assert!(size > 0);
+    /// Creates a worker pool of given size and takes a Sctp Stream.
+    pub fn new(num_workers: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
+        assert!(num_workers > 0);
         assert!(packet_size > PACKET_METADATA_SIZE);
 
-        let mut workers = Vec::with_capacity(size);
+        let mut workers = Vec::with_capacity(num_workers);
         let stream = Arc::new(stream);
         let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())), Condvar::new()));
 
-        for i in 0..size{
+        for i in 0..num_workers {
             workers.push(ConnectionWorker::new(i, Arc::clone(&heap), Arc::clone(&stream), packet_size));
         }
 
@@ -69,18 +64,17 @@ impl ConnectionScheduler{
         cvar.notify_one();
     }
 
-    /// Method that consumes and starts the scheduler.
-    /// Reads the requests from the Sctp Stream, process them and schedule them.
-    ///
+    /// Starts and consumes the scheduler.
+    /// Each request will be assigned to a worker by SJF scheduling.
     pub fn start(self){
-        let mut buffer: Vec<u8> = vec![0;self.buffer_size];
+        let mut buffer = vec![0u8;self.buffer_size];
         let mut sender_info: SctpSenderReceiveInfo = SctpSenderReceiveInfo::new();
 
 
         loop {
 
             let bytes_read = self.stream.read(&mut buffer, Some(&mut sender_info), None).unwrap();
-            let ppid = sender_info.sinfo_ppid as u32;
+            let ppid = sender_info.sinfo_ppid;
 
             if bytes_read == 0 {
                 break;
@@ -97,6 +91,8 @@ impl ConnectionScheduler{
                 }
             };
 
+            println!("{}", path);
+
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -105,16 +101,13 @@ impl ConnectionScheduler{
                 .open(&path);
 
             let file = file.unwrap_or_else(|_|{
-                println!("Not exists: {}",path);
                 OpenOptions::new()
                     .read(true)
                     .write(true)
                     .create(false)
                     .truncate(false)
                     .open("./404.html").unwrap()
-            }
-
-            );
+            });
 
             let mapped_file = MappedFile::new(file).unwrap();
 
@@ -210,17 +203,17 @@ impl ConnectionWorker{
                     // When the heap is not empty extract the job release the mutex and execute the job
 
                     println!("Worker thread labeled {label} got a new job.");
-                    if let Some(Reverse(job_pair)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
+                    if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                         drop(heap_guard);
 
-                        let (job,ppid) = job_pair;
-                        let file_size = job.mmap_as_slice().len();
+                        let (file_buffer,ppid) = job;
+                        let file_size = file_buffer.mmap_as_slice().len();
 
                         // Ceil formula for integers
                         let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
                         // Iterate through each chunk and send the packets
-                        for (chunk_index,chunk) in job.mmap_as_slice().chunks(chunk_size).enumerate(){
+                        for (chunk_index,chunk) in file_buffer.mmap_as_slice().chunks(chunk_size).enumerate(){
 
                             // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
                             let mut chunk_packet = if chunk_index != chunk_count - 1 {

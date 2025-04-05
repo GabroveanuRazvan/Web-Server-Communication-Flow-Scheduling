@@ -4,14 +4,14 @@ use std::sync::mpsc::{Sender,Receiver};
 use std::thread;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
-pub struct IndexedTreadPool{
+pub struct IndexedThreadPool {
 
     workers: Vec<(IndexedWorker,Option<Sender<Job>>)>,
     num_workers: usize,
 
 }
 
-impl IndexedTreadPool{
+impl IndexedThreadPool {
 
     /// Creates a new thread pool by allocating a number of workers waiting to get jobs.
     pub fn new(num_workers: usize) -> Self{
@@ -53,7 +53,7 @@ impl IndexedTreadPool{
 
 }
 
-impl Drop for IndexedTreadPool{
+impl Drop for IndexedThreadPool {
 
     /// Takes each transmitter, drops it and waits for the worker to finish.
     fn drop(&mut self) {
@@ -117,13 +117,13 @@ mod tests{
     #[test]
     #[should_panic]
     fn test_indexed_thread_pool_1(){
-        let pool = IndexedTreadPool::new(0);
+        let pool = IndexedThreadPool::new(0);
     }
 
     #[test]
     #[should_panic]
     fn test_indexed_thread_pool_2(){
-        let pool = IndexedTreadPool::new(3);
+        let pool = IndexedThreadPool::new(3);
 
         pool.execute(5, move || {
         });
@@ -134,7 +134,7 @@ mod tests{
     fn test_indexed_thread_pool_3(){
 
         let num_cores = thread::available_parallelism().unwrap_or(NonZero::new(6).unwrap()).get();
-        let pool = IndexedTreadPool::new(num_cores);
+        let pool = IndexedThreadPool::new(num_cores);
 
         let counter = Arc::new(AtomicUsize::new(0));
 

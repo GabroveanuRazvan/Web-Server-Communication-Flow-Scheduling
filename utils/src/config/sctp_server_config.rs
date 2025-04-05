@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use crate::config::serialization::load;
 use crate::constants::{KILOBYTE,DEFAULT_SERVER_CONFIG_PATH,SERVER_CONFIG_PATH_ENV,CONFIG_LOAD_ERROR};
+use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 
 static SERVER_CONFIG: OnceLock<SctpServerConfig> = OnceLock::new();
 
@@ -14,6 +15,7 @@ pub struct SctpServerConfig {
     port: u16,
     root: PathBuf,
     default_outgoing_streams: u16,
+    scheduling_policy: u8,
     max_incoming_streams: u16,
     file_packet_size: usize,
 }
@@ -28,6 +30,7 @@ impl Default for SctpServerConfig {
             root: PathBuf::default(),
             default_outgoing_streams: 10,
             max_incoming_streams: 10,
+            scheduling_policy: 0,
             file_packet_size: 32 * KILOBYTE,
         }
 
@@ -47,6 +50,7 @@ impl SctpServerConfig {
 
     }
 
+    pub fn scheduling_policy() -> SchedulingPolicy {Self::get_config().scheduling_policy.into()}
     pub fn addresses() -> &'static [Ipv4Addr] {
         Self::get_config().addresses.as_slice()
     }
@@ -90,6 +94,7 @@ mod tests {
         assert_eq!(SctpServerConfig::file_packet_size(),65536);
         assert_eq!(SctpServerConfig::addresses()[0],Ipv4Addr::UNSPECIFIED);
         assert_eq!(SctpServerConfig::addresses()[1],Ipv4Addr::new(192,168,0,1));
+        assert_eq!(SctpServerConfig::scheduling_policy(), SchedulingPolicy::RoundRobin);
     }
 
 }
