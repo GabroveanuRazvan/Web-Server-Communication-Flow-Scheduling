@@ -91,8 +91,6 @@ impl ConnectionScheduler{
                 }
             };
 
-            println!("{}", path);
-
             let file = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -202,7 +200,7 @@ impl ConnectionWorker{
 
                     // When the heap is not empty extract the job release the mutex and execute the job
 
-                    println!("Worker thread labeled {label} got a new job.");
+                    // println!("Worker thread labeled {label} got a new job.");
                     if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                         drop(heap_guard);
 
