@@ -27,17 +27,18 @@ impl SctpProxyConfig {
 
     pub fn get_config() -> &'static SctpProxyConfig {
 
-        let mut sctp_config = match env::var(SCTP_PROXY_CONFIG_PATH_ENV){
-            Ok(config_path) => load::<SctpProxyConfig,&Path>(Path::new(&config_path)).expect(&format!("{} {}", CONFIG_LOAD_ERROR, config_path.as_str())),
-            Err(_) => load::<SctpProxyConfig,&Path>(Path::new(DEFAULT_SCTP_PROXY_CONFIG_PATH)).expect(&format!("{} {}",CONFIG_LOAD_ERROR, DEFAULT_SCTP_PROXY_CONFIG_PATH)),
-        };
-
-        // Add a "." at the start of the download suffix if it was not provided
-        if !sctp_config.download_suffix.starts_with("."){
-            sctp_config.download_suffix = format!(".{}",sctp_config.download_suffix)
-        }
-
         SCTP_PROXY_CONFIG.get_or_init(||{
+
+            let mut sctp_config = match env::var(SCTP_PROXY_CONFIG_PATH_ENV){
+                Ok(config_path) => load::<SctpProxyConfig,&Path>(Path::new(&config_path)).expect(&format!("{} {}", CONFIG_LOAD_ERROR, config_path.as_str())),
+                Err(_) => load::<SctpProxyConfig,&Path>(Path::new(DEFAULT_SCTP_PROXY_CONFIG_PATH)).expect(&format!("{} {}",CONFIG_LOAD_ERROR, DEFAULT_SCTP_PROXY_CONFIG_PATH)),
+            };
+
+            // Add a "." at the start of the download suffix if it was not provided
+            if !sctp_config.download_suffix.starts_with("."){
+                sctp_config.download_suffix = format!(".{}",sctp_config.download_suffix)
+            }
+
           sctp_config
         })
 

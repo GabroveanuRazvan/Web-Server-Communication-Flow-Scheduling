@@ -240,7 +240,6 @@ impl ConnectionWorker{
                             }
 
                         }
-                        println!("Done sending file {}",stream_number);
 
                     }
 

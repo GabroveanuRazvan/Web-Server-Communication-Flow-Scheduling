@@ -3,14 +3,14 @@ use std::net::{Ipv4Addr};
 use crate::sctp::sctp_api::{SctpEventSubscribeBuilder, SctpPeerBuilder, SctpSenderReceiveInfo};
 use crate::sctp::sctp_client::{SctpStream, SctpStreamBuilder};
 use io::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{mpsc, Arc, LazyLock, Mutex, RwLock};
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{mpsc};
 use std::thread::JoinHandle;
 use inotify::{EventMask, Inotify, WatchMask};
 use memmap2::Mmap;
@@ -21,7 +21,6 @@ use crate::constants::{KILOBYTE, PACKET_BUFFER_SIZE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
 use crate::packets::chunk_type::FilePacketType;
-use crate::packets::status_code::StatusCode::Unknown;
 
 
 /// Abstraction for a tcp to sctp proxy
@@ -495,7 +494,7 @@ impl DownloaderWorker {
 
     /// Parsed an already identified metadata packet.
     fn parse_metadata_packet(byte_packet: &mut BytePacket) -> DownloadingFileMetadata {
-        println!("Parsing metadata packet");
+
         let total_chunks = byte_packet.read_u16().unwrap();
         let server_file_path = String::from_utf8_lossy(byte_packet.read_all().unwrap());
         let download_path = SctpProxy::cache_downloading_path(&server_file_path);

@@ -3,9 +3,10 @@ use std::sync::Arc;
 use memmap2::Mmap;
 use crate::pools::indexed_thread_pool::IndexedThreadPool;
 use crate::sctp::sctp_client::SctpStream;
-use crate::constants::CHUNK_METADATA_SIZE;
+use crate::constants::{CHUNK_METADATA_SIZE, METADATA_STATIC_SIZE};
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
+use crate::packets::chunk_type::FilePacketType;
 use crate::sctp::sctp_api::SctpSenderReceiveInfo;
 
 /// Round Robin scheduler for a Sctp Stream.
@@ -39,47 +40,57 @@ impl RoundRobinScheduler {
     }
 
     /// Pushes on the scheduler min-heap a new MappedFile as a job.
-    pub fn schedule_job(&mut self, job: (Mmap,u32)){
+    pub fn schedule_job(&mut self, job: (Mmap,String)){
 
         let job_index = self.round_robin_counter;
         self.round_robin_counter = (self.round_robin_counter + 1) % self.num_workers;
 
-        // 4 bytes coming from the leading chunk index + total chunks
+        // 1 byte off coming from the chunk packet type
         let chunk_size = self.packet_size - CHUNK_METADATA_SIZE;
         let packet_size = self.packet_size;
         let stream = Arc::clone(&self.stream);
 
         self.worker_pool.execute(job_index, move || {
-            let (file_buffer,ppid) = job;
 
+            let (file_buffer,path) = job;
+            let path_bytes = &path.as_bytes()[1..];
             let file_size = file_buffer.len();
-
+            let stream_number = job_index as u16;
             // Ceil formula for integers
             let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
+            // Send a metadata packet made out of packet type + total chunks + file_path
+            let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
+            metadata_packet.write_u8(FilePacketType::Metadata.into()).unwrap();
+            metadata_packet.write_u16(chunk_count as u16).unwrap();
+            unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
+
+            stream.write_all(metadata_packet.get_buffer(),stream_number,0,0).unwrap();
+
+
             // Iterate through each chunk and send the packets
-            for (chunk_index,chunk) in file_buffer.chunks(chunk_size).enumerate() {
+            for (chunk_index,chunk) in file_buffer.chunks(chunk_size).enumerate(){
 
                 // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
                 let mut chunk_packet = if chunk_index != chunk_count - 1 {
                     BytePacket::new(packet_size)
-                } else {
+
+                }
+                else{
                     BytePacket::new(chunk.len() + CHUNK_METADATA_SIZE)
                 };
 
-                chunk_packet.write_u16(chunk_index as u16).unwrap();
-                chunk_packet.write_u16(chunk_count as u16).unwrap();
-
-                unsafe {
-                    chunk_packet.write_buffer(chunk).unwrap();
-                }
+                chunk_packet.write_u8(FilePacketType::Chunk.into()).unwrap();
+                unsafe{ chunk_packet.write_buffer(chunk).unwrap(); }
 
                 // Send the chunk
-                match stream.write_all(chunk_packet.get_buffer(), job_index as u16, ppid, chunk_index as u32) {
+                match stream.write_all(chunk_packet.get_buffer(),stream_number,0,chunk_index as u32){
                     Ok(_bytes) => (),
-                    Err(e) => println!("Write Error: {:?}", e)
+                    Err(e) => eprintln!("Write Error: {:?}",e)
                 }
+
             }
+
 
         });
 
@@ -95,7 +106,6 @@ impl RoundRobinScheduler {
         loop{
 
             let bytes_read = self.stream.read(&mut buffer,Some(&mut sender_info),None).unwrap();
-            let ppid = sender_info.sinfo_ppid;
 
             if bytes_read == 0 {
                 break;
@@ -129,7 +139,7 @@ impl RoundRobinScheduler {
 
             let mmap = unsafe{Mmap::map(&file).unwrap()};
 
-            self.schedule_job((mmap,ppid));
+            self.schedule_job((mmap,path));
 
         }
 
