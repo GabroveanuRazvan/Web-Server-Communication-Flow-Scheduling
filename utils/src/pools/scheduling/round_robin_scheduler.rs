@@ -67,7 +67,7 @@ impl RoundRobinScheduler {
             metadata_packet.write_u64(file_size as u64).unwrap();
             unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
 
-            stream.write_all(metadata_packet.get_buffer(),stream_number,0,0).unwrap();
+            stream.write_all(metadata_packet.get_buffer(),stream_number,ppid,0).unwrap();
 
 
             // Iterate through each chunk and send the packets
