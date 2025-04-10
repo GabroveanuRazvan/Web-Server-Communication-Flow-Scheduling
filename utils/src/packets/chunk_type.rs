@@ -8,7 +8,6 @@ pub enum FilePacketType {
     Unknown(u8),
     Metadata,
     Chunk,
-    LastChunk,
 
 }
 
@@ -19,7 +18,6 @@ impl From<u8> for FilePacketType {
         match item{
             1 => FilePacketType::Metadata,
             2 => FilePacketType::Chunk,
-            3 => FilePacketType::LastChunk,
             _ => FilePacketType::Unknown(item),
         }
     }
@@ -34,7 +32,6 @@ impl From<FilePacketType> for u8{
 
             FilePacketType::Metadata => 1,
             FilePacketType::Chunk => 2,
-            FilePacketType::LastChunk => 3,
             FilePacketType::Unknown(num) => num,
 
         }
@@ -49,7 +46,6 @@ impl Display for FilePacketType {
             FilePacketType::Unknown(code) => write!(f, "Unknown({})", code),
             FilePacketType::Metadata => write!(f, "Metadata"),
             FilePacketType::Chunk => write!(f, "Chunk"),
-            FilePacketType::LastChunk => write!(f, "LastChunk"),
         }
     }
 }
@@ -70,8 +66,6 @@ pub mod tests{
         let packet_type = FilePacketType::from(2);
         assert_eq!(packet_type,FilePacketType::Chunk);
 
-        let packet_type = FilePacketType::from(3);
-        assert_eq!(packet_type,FilePacketType::LastChunk);
 
         let packet_type = FilePacketType::from(255);
         assert_eq!(packet_type,FilePacketType::Unknown(255));
@@ -87,8 +81,6 @@ pub mod tests{
         let packet_type: FilePacketType = 2u8.into();
         assert_eq!(packet_type,FilePacketType::Chunk);
 
-        let packet_type: FilePacketType = 3u8.into();
-        assert_eq!(packet_type,FilePacketType::LastChunk);
 
         let packet_type: FilePacketType = 255u8.into();
         assert_eq!(packet_type,FilePacketType::Unknown(255));
@@ -102,8 +94,6 @@ pub mod tests{
         assert_eq!(num,1);
         let num = u8::from(FilePacketType::Chunk);
         assert_eq!(num,2);
-        let num = u8::from(FilePacketType::LastChunk);
-        assert_eq!(num,3);
         let num = u8::from(FilePacketType::Unknown(255));
         assert_eq!(num,255);
 

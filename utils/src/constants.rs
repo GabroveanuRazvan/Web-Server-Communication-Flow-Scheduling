@@ -32,4 +32,6 @@ pub const PACKET_BUFFER_SIZE: usize = 64 * KILOBYTE;
 /// Schedulers macros ///
 /// ////////////////////
 
-pub const PACKET_METADATA_SIZE: usize = 4 * BYTE;
+
+pub const METADATA_STATIC_SIZE: usize = 3 * BYTE;
+pub const CHUNK_METADATA_SIZE: usize = 1 * BYTE;

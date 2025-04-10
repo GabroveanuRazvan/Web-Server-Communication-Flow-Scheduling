@@ -233,6 +233,10 @@ impl BytePacket{
         self.buffer[0..self.position].as_ref()
     }
 
+    pub fn packet_size(&self) -> usize{
+        self.buffer_size
+    }
+
 }
 
 #[cfg(test)]

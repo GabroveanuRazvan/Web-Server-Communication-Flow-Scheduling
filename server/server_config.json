@@ -1,9 +1,9 @@
 {
   "addresses": ["0.0.0.0"],
   "port": 7878,
-  "root": "./web_files",
+  "root": "../benchmarking/benchmark_dataset",
   "default_outgoing_streams": 12,
-  "scheduling_policy": 1,
+  "scheduling_policy": 0,
   "max_incoming_streams": 10,
-  "file_packet_size": 65536
+  "file_packet_size": 16384
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use memmap2::Mmap;
 use crate::pools::indexed_thread_pool::IndexedThreadPool;
 use crate::sctp::sctp_client::SctpStream;
-use crate::constants::PACKET_METADATA_SIZE;
+use crate::constants::CHUNK_METADATA_SIZE;
 use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_api::SctpSenderReceiveInfo;
@@ -23,7 +23,7 @@ impl RoundRobinScheduler {
 
     /// Creates a worker pool of given size and takes a Sctp Stream.
     pub fn new(num_workers: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
-        assert!(packet_size > PACKET_METADATA_SIZE);
+        assert!(packet_size > CHUNK_METADATA_SIZE);
 
         let worker_pool = IndexedThreadPool::new(num_workers);
 
@@ -45,7 +45,7 @@ impl RoundRobinScheduler {
         self.round_robin_counter = (self.round_robin_counter + 1) % self.num_workers;
 
         // 4 bytes coming from the leading chunk index + total chunks
-        let chunk_size = self.packet_size - PACKET_METADATA_SIZE;
+        let chunk_size = self.packet_size - CHUNK_METADATA_SIZE;
         let packet_size = self.packet_size;
         let stream = Arc::clone(&self.stream);
 
@@ -64,7 +64,7 @@ impl RoundRobinScheduler {
                 let mut chunk_packet = if chunk_index != chunk_count - 1 {
                     BytePacket::new(packet_size)
                 } else {
-                    BytePacket::new(chunk.len() + PACKET_METADATA_SIZE)
+                    BytePacket::new(chunk.len() + CHUNK_METADATA_SIZE)
                 };
 
                 chunk_packet.write_u16(chunk_index as u16).unwrap();
