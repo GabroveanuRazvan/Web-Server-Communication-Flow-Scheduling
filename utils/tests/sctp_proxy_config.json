@@ -9,5 +9,7 @@
   "browser_child_exec_path": "../tcp_cache_fetcher_proxy/target/debug/tcp_cache_fetcher_proxy",
   "browser_server_port": 7878,
   "browser_server_address": "0.0.0.0",
-  "max_browser_connections": 6
+  "max_browser_connections": 6,
+
+  "use_cache": true
 }

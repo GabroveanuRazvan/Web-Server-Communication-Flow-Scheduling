@@ -3,7 +3,7 @@
   "port": 7878,
   "root": "../benchmarking/benchmark_dataset",
   "default_outgoing_streams": 12,
-  "scheduling_policy": 1,
+  "scheduling_policy": 0,
   "max_incoming_streams": 10,
   "file_packet_size": 16384
 }

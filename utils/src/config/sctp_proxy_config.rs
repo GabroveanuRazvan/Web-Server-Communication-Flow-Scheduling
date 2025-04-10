@@ -21,6 +21,8 @@ pub struct SctpProxyConfig{
     browser_server_port: u16,
     browser_server_address: Ipv4Addr,
     max_browser_connections: u16,
+
+    use_cache: bool,
 }
 
 impl SctpProxyConfig {
@@ -77,6 +79,8 @@ impl SctpProxyConfig {
     }
     pub fn max_browser_connections() -> u16 {Self::get_config().max_browser_connections}
 
+    pub fn use_cache() -> bool {Self::get_config().use_cache}
+
 }
 
 #[cfg(test)]
@@ -101,6 +105,7 @@ mod tests {
         assert_eq!(SctpProxyConfig::download_suffix(),".tmp");
         assert_eq!(SctpProxyConfig::default_outgoing_streams(),10);
         assert_eq!(SctpProxyConfig::max_incoming_streams(),30);
+        assert_eq!(SctpProxyConfig::use_cache(),true);
 
     }
 

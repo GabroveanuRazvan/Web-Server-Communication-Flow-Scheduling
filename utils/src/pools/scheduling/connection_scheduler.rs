@@ -15,7 +15,7 @@ use crate::packets::chunk_type::FilePacketType;
 /// Shortest Job First scheduler for a Sctp Stream.
 pub struct ConnectionScheduler{
 
-    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,String)>>>>,Condvar)>,
+    heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,String,u32)>>>>,Condvar)>,
     stream: Arc<SctpStream>,
     workers: Vec<ConnectionWorker>,
     packet_size: usize,
@@ -49,7 +49,7 @@ impl ConnectionScheduler{
     }
 
     /// Pushes on the scheduler's min-heap a new MappedFile as a job.
-    pub fn schedule_job(&self,job: (MappedFile,String)){
+    pub fn schedule_job(&self,job: (MappedFile,String,u32)){
         // get a reference to the heap and condition variable
         let (mutex,cvar) = &*self.heap;
 
@@ -108,7 +108,7 @@ impl ConnectionScheduler{
 
             let mapped_file = MappedFile::new(file).unwrap();
 
-            self.schedule_job((mapped_file,path));
+            self.schedule_job((mapped_file,path,sender_info.sinfo_ppid));
 
         }
     }
@@ -155,7 +155,7 @@ pub struct ConnectionWorker{
 impl ConnectionWorker{
     /// Starts the worker thread.
     ///
-    pub fn new(label: usize, heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,String)>>>>,Condvar)>, stream: Arc<SctpStream>, packet_size: usize) -> Self{
+    pub fn new(label: usize, heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,String,u32)>>>>,Condvar)>, stream: Arc<SctpStream>, packet_size: usize) -> Self{
 
         // 1 byte off coming from the chunk packet type
         let chunk_size = packet_size - CHUNK_METADATA_SIZE;
@@ -202,20 +202,22 @@ impl ConnectionWorker{
                     if let Some(Reverse(job)) = heap_guard.as_mut().and_then(|heap| heap.pop()){
                         drop(heap_guard);
 
-                        let (file_buffer,path) = job;
+                        let (file_buffer,path,ppid) = job;
                         let path_bytes = &path.as_bytes()[1..];
                         let file_size = file_buffer.mmap_as_slice().len();
 
                         // Ceil formula for integers
                         let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
-                        // Send a metadata packet made out of packet type + total chunks + file_path
+                        // Send a metadata packet made out of packet type + total chunks + file_size + file_path
                         let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
                         metadata_packet.write_u8(FilePacketType::Metadata.into()).unwrap();
                         metadata_packet.write_u16(chunk_count as u16).unwrap();
+                        metadata_packet.write_u64(file_size as u64).unwrap();
+
                         unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
 
-                        stream.write_all(metadata_packet.get_buffer(),stream_number,0,0).unwrap();
+                        stream.write_all(metadata_packet.get_buffer(),stream_number,ppid,0).unwrap();
 
 
                         // Iterate through each chunk and send the packets
@@ -234,7 +236,7 @@ impl ConnectionWorker{
                             unsafe{ chunk_packet.write_buffer(chunk).unwrap(); }
 
                             // Send the chunk
-                            match stream.write_all(chunk_packet.get_buffer(),stream_number,0,chunk_index as u32){
+                            match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
                                 Ok(_bytes) => (),
                                 Err(e) => eprintln!("Write Error: {:?}",e)
                             }

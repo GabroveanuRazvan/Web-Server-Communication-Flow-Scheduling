@@ -40,7 +40,7 @@ impl RoundRobinScheduler {
     }
 
     /// Pushes on the scheduler min-heap a new MappedFile as a job.
-    pub fn schedule_job(&mut self, job: (Mmap,String)){
+    pub fn schedule_job(&mut self, job: (Mmap,String,u32)){
 
         let job_index = self.round_robin_counter;
         self.round_robin_counter = (self.round_robin_counter + 1) % self.num_workers;
@@ -52,17 +52,19 @@ impl RoundRobinScheduler {
 
         self.worker_pool.execute(job_index, move || {
 
-            let (file_buffer,path) = job;
+            let (file_buffer,path,ppid) = job;
             let path_bytes = &path.as_bytes()[1..];
             let file_size = file_buffer.len();
             let stream_number = job_index as u16;
+
             // Ceil formula for integers
             let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
-            // Send a metadata packet made out of packet type + total chunks + file_path
+            // Send a metadata packet made out of packet type + total chunks + file_size + file_path
             let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
             metadata_packet.write_u8(FilePacketType::Metadata.into()).unwrap();
             metadata_packet.write_u16(chunk_count as u16).unwrap();
+            metadata_packet.write_u64(file_size as u64).unwrap();
             unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
 
             stream.write_all(metadata_packet.get_buffer(),stream_number,0,0).unwrap();
@@ -84,7 +86,7 @@ impl RoundRobinScheduler {
                 unsafe{ chunk_packet.write_buffer(chunk).unwrap(); }
 
                 // Send the chunk
-                match stream.write_all(chunk_packet.get_buffer(),stream_number,0,chunk_index as u32){
+                match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
                     Ok(_bytes) => (),
                     Err(e) => eprintln!("Write Error: {:?}",e)
                 }
@@ -139,7 +141,7 @@ impl RoundRobinScheduler {
 
             let mmap = unsafe{Mmap::map(&file).unwrap()};
 
-            self.schedule_job((mmap,path));
+            self.schedule_job((mmap,path,sender_info.sinfo_ppid));
 
         }
 

@@ -1,24 +1,19 @@
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{File};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::io::{Error, ErrorKind, Read, Result, Write};
 use std::path::{PathBuf};
 use std::sync::{RwLock, LazyLock, Condvar, Mutex, Arc};
-use crate::constants::KILOBYTE;
 use crate::http_parsers::{basic_http_response, encode_path, extract_uri, http_response_to_string};
 use std::sync::mpsc::{channel,Sender,Receiver};
 use std::{thread};
 use std::thread::JoinHandle;
 use inotify::{EventMask, Inotify, WatchMask};
-use libc::clone;
 use memmap2::Mmap;
 use crate::config::sctp_proxy_config::SctpProxyConfig;
+use crate::constants::{BROWSER_CHUNK_SIZE, INOTIFY_BUFFER_SIZE, REQUEST_BUFFER_SIZE};
 use crate::logger::Logger;
 use crate::pools::thread_pool::ThreadPool;
-
-const REQUEST_BUFFER_SIZE: usize = 4 * KILOBYTE;
-const INOTIFY_BUFFER_SIZE: usize = 16 * KILOBYTE;
-const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 
 /// Maps each cache file name to a reference count mutex and condvar
 /// Used to signal multiple waiting threads for requested files
@@ -141,7 +136,7 @@ impl TcpProxy{
                         while !*ready {
                             ready = cvar.wait(ready).unwrap();
                         }
-                        // LOGGER.writeln(format!("Exit cvar {}",cache_file_path.display()).as_str());
+
 
                     }
 

@@ -28,10 +28,17 @@ pub const DEFAULT_SCTP_PROXY_CONFIG_PATH: &str = "./sctp_proxy_config.json";
 pub const PACKET_BUFFER_SIZE: usize = 64 * KILOBYTE;
 
 
+/// ///////////////////////////
+/// Tcp proxy configuration ///
+/// //////////////////////////
+pub const REQUEST_BUFFER_SIZE: usize = 4 * KILOBYTE;
+pub const INOTIFY_BUFFER_SIZE: usize = 16 * KILOBYTE;
+pub const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
+
 /// //////////////////////
 /// Schedulers macros ///
 /// ////////////////////
 
 
-pub const METADATA_STATIC_SIZE: usize = 3 * BYTE;
+pub const METADATA_STATIC_SIZE: usize = 11 * BYTE;
 pub const CHUNK_METADATA_SIZE: usize = 1 * BYTE;
