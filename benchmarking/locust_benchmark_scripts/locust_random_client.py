@@ -26,7 +26,7 @@ def choose_dir_file(dir : str):
 
 
 class WebUser(HttpUser):
-    wait_time = between(1, 3)
+    wait_time = between(0, 0)
 
     @task
     def random_file(self):

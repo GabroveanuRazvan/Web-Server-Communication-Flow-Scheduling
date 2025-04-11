@@ -722,12 +722,8 @@ impl SctpRelay{
 
                                 current_chunks += 1;
 
-                                // Break the packet loop and send the end carriage return
+                                // Break the packet loop
                                 if current_chunks == total_chunks{
-                                    match stream.write_all(b"\r\n"){
-                                        _ => ()
-                                    }
-
                                     break 'packet_loop;
                                 }
 
