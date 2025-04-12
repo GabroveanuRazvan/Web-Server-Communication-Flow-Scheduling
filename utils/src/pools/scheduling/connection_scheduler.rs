@@ -161,7 +161,7 @@ impl ConnectionWorker{
         let chunk_size = packet_size - CHUNK_METADATA_SIZE;
 
         let thread = thread::Builder::new()
-            .name(format!("Connection Worker {}", label))
+            .name(format!("Conn_Th_{}", label))
             .spawn(move || {
 
                 // Get a reference to the mutex and cond var

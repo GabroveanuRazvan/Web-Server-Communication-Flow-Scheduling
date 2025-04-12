@@ -10,3 +10,4 @@
 benchmarking/results/results*
 **/perf.data
 **/flamegraph.svg
+**/results/

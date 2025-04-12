@@ -76,7 +76,7 @@ impl Worker {
     pub fn new(label: usize,receiver: Arc<Mutex<Receiver<Job>>>) -> Self{
 
         let thread = thread::Builder::new()
-            .name(format!("Worker {label}"))
+            .name(format!("Th_{label}"))
             .spawn(move || {
                 loop{
 

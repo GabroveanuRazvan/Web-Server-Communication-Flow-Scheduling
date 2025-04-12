@@ -1,4 +1,4 @@
-from locust import HttpUser, task, between
+from locust import HttpUser, task, constant
 import os
 import numpy as np
 
@@ -26,7 +26,7 @@ def choose_dir_file(dir : str):
 
 
 class WebUser(HttpUser):
-    wait_time = between(0, 0)
+    wait_time = constant(0)
 
     @task
     def random_file(self):

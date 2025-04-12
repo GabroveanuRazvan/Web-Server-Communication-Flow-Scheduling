@@ -42,3 +42,5 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+
+//For flamegraph to work: echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid

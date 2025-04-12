@@ -85,7 +85,7 @@ impl IndexedWorker{
 
         // Create a new labeled thread that gets jobs and calls them
         let thread = thread::Builder::new()
-            .name(format!("Indexed worker {index}"))
+            .name(format!("Idx_th_{index}"))
             .spawn(move || {
 
                 for job in job_rx{
