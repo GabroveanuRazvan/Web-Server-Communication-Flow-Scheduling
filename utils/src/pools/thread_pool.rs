@@ -75,30 +75,30 @@ struct Worker
 impl Worker {
     pub fn new(label: usize,receiver: Arc<Mutex<Receiver<Job>>>) -> Self{
 
-        let thread = thread::spawn(move || {
+        let thread = thread::Builder::new()
+            .name(format!("Worker {label}"))
+            .spawn(move || {
+                loop{
 
-            loop{
+                    let message = receiver
+                        .lock()
+                        .unwrap()
+                        .recv();
 
-                let message = receiver
-                    .lock()
-                    .unwrap()
-                    .recv();
+                    match message{
+                        Ok(job) => {
+                            // println!("Worker labeled with {label} got a job.");
+                            job()
+                        }
 
-                match message{
-                    Ok(job) => {
-                        // println!("Worker labeled with {label} got a job.");
-                        job()
+                        Err(_) => {
+                            println!("Worker labeled with {label} disconnected.");
+                            break;
+                        }
+
                     }
-
-                    Err(_) => {
-                        println!("Worker labeled with {label} disconnected.");
-                        break;
-                    }
-
                 }
-            }
-
-        });
+            }).unwrap();
 
         Self{
             label,

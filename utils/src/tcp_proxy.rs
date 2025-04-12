@@ -198,47 +198,49 @@ impl TcpProxy{
         let mut events_buffer = vec![0u8; INOTIFY_BUFFER_SIZE];
 
         // Spawn a thread that reads in a loop the events
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Inotify thread"))
+            .spawn(move || {
 
-            loop {
-                let events = inotify.read_events_blocking(&mut events_buffer)
-                    .expect("Error while reading events");
+                loop {
+                    let events = inotify.read_events_blocking(&mut events_buffer)
+                        .expect("Error while reading events");
 
-                for event in events {
+                    for event in events {
 
-                    // File downloaded
-                    if event.mask.contains(EventMask::MOVED_TO){
+                        // File downloaded
+                        if event.mask.contains(EventMask::MOVED_TO){
 
-                        let file_name = event.name
-                            .unwrap()
-                            .to_str()
-                            .unwrap()
-                            .to_string();
+                            let file_name = event.name
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string();
 
-                        // Retrieve the transmitter and send a signal
-                        let download_map = DOWNLOADING_FILES.read().unwrap();
+                            // Retrieve the transmitter and send a signal
+                            let download_map = DOWNLOADING_FILES.read().unwrap();
 
-                        // LOGGER.writeln(format!("Inotify {}",file_name).as_str());
+                            // LOGGER.writeln(format!("Inotify {}",file_name).as_str());
 
-                        match download_map.get(&file_name){
-                            None => (),
-                            Some(lock_entry) => {
-                                let lock_entry = Arc::clone(lock_entry);
-                                let (lock,cvar) = &*lock_entry;
-                                let mut ready = lock.lock().unwrap();
-                                *ready = true;
-                                cvar.notify_all();
+                            match download_map.get(&file_name){
+                                None => (),
+                                Some(lock_entry) => {
+                                    let lock_entry = Arc::clone(lock_entry);
+                                    let (lock,cvar) = &*lock_entry;
+                                    let mut ready = lock.lock().unwrap();
+                                    *ready = true;
+                                    cvar.notify_all();
+                                }
                             }
+
+
                         }
-
-
                     }
                 }
-            }
 
 
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
 
     }
 
@@ -247,14 +249,16 @@ impl TcpProxy{
 
         let mut stdout = std::io::stdout();
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Proxy writer thread"))
+            .spawn(move || {
 
-            for request in writer_rx{
-                stdout.write_all(request.as_bytes())?;
-            }
+                for request in writer_rx{
+                    stdout.write_all(request.as_bytes())?;
+                }
 
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
 
     }
 

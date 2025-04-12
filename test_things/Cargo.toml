@@ -4,12 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-libc = "0.2.159"
 utils = {path = "../utils"}
-http = "1.1.0"
-memmap2 = "0.9.5"
-indexmap = "2.6.0"
-chrono = "0.4.38"
-scraper = "0.21.0"
-inotify = "0.11.0"
 path-clean = "1.0.1"

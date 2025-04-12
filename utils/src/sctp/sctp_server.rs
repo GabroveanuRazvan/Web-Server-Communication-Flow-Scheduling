@@ -103,7 +103,7 @@ impl SctpServer{
 
     ///Method used to handle clients
 
-    pub fn handle_client(&self,stream: SctpStream) -> Result<()>{
+    pub fn handle_client(&self,stream: SctpStream){
 
         println!("New client!");
         println!("Client address: {:?}", stream.local_address());
@@ -132,8 +132,6 @@ impl SctpServer{
             SchedulingPolicy::Unknown(val) => panic!("Unknown scheduling policy: {val}"),
 
         }
-
-        Ok(())
     }
 
     /// Starts listening for clients and consumes the server.
@@ -145,7 +143,7 @@ impl SctpServer{
         for stream in self.incoming(){
 
             let stream = stream?;
-            self.handle_client(stream)?
+            self.handle_client(stream);
 
         }
 

@@ -8,3 +8,5 @@
 **/__pycache__
 
 benchmarking/results/results*
+**/perf.data
+**/flamegraph.svg

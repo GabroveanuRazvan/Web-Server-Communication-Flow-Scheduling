@@ -84,7 +84,8 @@ impl IndexedWorker{
     pub fn new(index: usize,job_rx: Receiver<Job>) -> Self{
 
         // Create a new labeled thread that gets jobs and calls them
-        let thread = thread::Builder::new().name(format!("Indexed worker {index}"))
+        let thread = thread::Builder::new()
+            .name(format!("Indexed worker {index}"))
             .spawn(move || {
 
                 for job in job_rx{

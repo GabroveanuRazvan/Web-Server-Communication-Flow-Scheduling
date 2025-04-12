@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std;
+use std::fmt::format;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
@@ -121,40 +122,42 @@ impl SctpProxy{
         let outgoing_stream_num = sctp_status.sstat_outstrms;
         let mut downloaded_files = HashSet::new();
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Sender Sctp thread"))
+            .spawn(move || {
 
-            let mut stream_number = 0u16;
+                let mut stream_number = 0u16;
 
-            for path in sctp_rx {
+                for path in sctp_rx {
 
-                // Sanitize the path
-                let path = String::from(path.to_str().unwrap());
-                let file_path = match path.trim() {
-                    "/" => "/index.html".to_string(),
-                    _ => {
-                        path.to_string()
-                    }
-                };
+                    // Sanitize the path
+                    let path = String::from(path.to_str().unwrap());
+                    let file_path = match path.trim() {
+                        "/" => "/index.html".to_string(),
+                        _ => {
+                            path.to_string()
+                        }
+                    };
 
-                //Check if the file is already in the cache
-                match downloaded_files.get(file_path.as_str()){
-                    Some(_) => continue,
-                    None => (),
-                };
+                    //Check if the file is already in the cache
+                    match downloaded_files.get(file_path.as_str()){
+                        Some(_) => continue,
+                        None => (),
+                    };
 
-                downloaded_files.insert(file_path.clone());
+                    downloaded_files.insert(file_path.clone());
 
-                // Send the request to the server
-                sctp_client.write_all(path.as_bytes(),stream_number,0,0)?;
+                    // Send the request to the server
+                    sctp_client.write_all(path.as_bytes(),stream_number,0,0)?;
 
-                // Round-robin over the streams
-                stream_number = (stream_number + 1) % outgoing_stream_num;
+                    // Round-robin over the streams
+                    stream_number = (stream_number + 1) % outgoing_stream_num;
 
 
-            }
+                }
 
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
 
     }
 
@@ -177,72 +180,74 @@ impl SctpProxy{
         let mut events_buffer = vec![0u8; 16 * KILOBYTE];
 
         // Spawn a thread that reads in a loop the events
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Prefetch thread"))
+            .spawn(move || {
 
-            loop {
-                let events = inotify.read_events_blocking(&mut events_buffer)
-                    .expect("Error while reading events");
+                loop {
+                    let events = inotify.read_events_blocking(&mut events_buffer)
+                        .expect("Error while reading events");
 
-                for event in events {
+                    for event in events {
 
-                    // File downloaded
-                    if event.mask.contains(EventMask::MOVED_TO){
+                        // File downloaded
+                        if event.mask.contains(EventMask::MOVED_TO){
 
-                        let file_path = Path::new(event.name.unwrap());
+                            let file_path = Path::new(event.name.unwrap());
 
-                        // Check the file extension
-                        if let Some(extension) = file_path.extension(){
-                            if extension != "html"{
+                            // Check the file extension
+                            if let Some(extension) = file_path.extension(){
+                                if extension != "html"{
+                                    continue;
+                                }
+                            }
+                            else{
                                 continue;
                             }
+
+                            let file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(file_path);
+
+                            // Read the file and parse it
+                            let file = OpenOptions::new()
+                                .read(true)
+                                .create(false)
+                                .truncate(false)
+                                .open(&file_path).expect(format!("Could not open file to prefetch {:?}",file_path).as_str());
+
+
+                            let mmap = unsafe{Mmap::map(&file).unwrap()};
+                            let file_content = String::from_utf8_lossy(&mmap);
+                            let prefetched_file_names = extract_http_paths(&file_content);
+
+                            // Need to resolve each prefetched paths
+                            let server_path = file_path.strip_prefix(SctpProxyConfig::cache_path())
+                                .unwrap()
+                                .as_os_str()
+                                .to_str()
+                                .unwrap();
+
+                            // Get the parent of this html file in server side format
+                            let decoded_server_path = PathBuf::from(decode_path(server_path));
+                            let parent_path = decoded_server_path.parent().unwrap();
+
+                            // Send the file requests to the sctp sender
+                            for file_name in prefetched_file_names{
+                                // Join the parent of this html file with the file to be prefetched and clean the path
+                                let file_path = parent_path.join(file_name).clean();
+
+                                sctp_tx.send(file_path).map_err(
+                                    |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
+                                )?;
+                            }
+
+
                         }
-                        else{
-                            continue;
-                        }
-
-                        let file_path = PathBuf::from(SctpProxyConfig::cache_path()).join(file_path);
-
-                        // Read the file and parse it
-                        let file = OpenOptions::new()
-                            .read(true)
-                            .create(false)
-                            .truncate(false)
-                            .open(&file_path).expect(format!("Could not open file to prefetch {:?}",file_path).as_str());
-
-
-                        let mmap = unsafe{Mmap::map(&file).unwrap()};
-                        let file_content = String::from_utf8_lossy(&mmap);
-                        let prefetched_file_names = extract_http_paths(&file_content);
-
-                        // Need to resolve each prefetched paths
-                        let server_path = file_path.strip_prefix(SctpProxyConfig::cache_path())
-                            .unwrap()
-                            .as_os_str()
-                            .to_str()
-                            .unwrap();
-
-                        // Get the parent of this html file in server side format
-                        let decoded_server_path = PathBuf::from(decode_path(server_path));
-                        let parent_path = decoded_server_path.parent().unwrap();
-
-                        // Send the file requests to the sctp sender
-                        for file_name in prefetched_file_names{
-                            // Join the parent of this html file with the file to be prefetched and clean the path
-                            let file_path = parent_path.join(file_name).clean();
-
-                            sctp_tx.send(file_path).map_err(
-                                |e| Error::new(ErrorKind::Other,format!("Transmitter send error: {}",e))
-                            )?;
-                        }
-
 
                     }
-
                 }
-            }
 
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
     }
 
     /// Sctp thread that reads the incoming messages of the server.
@@ -254,46 +259,48 @@ impl SctpProxy{
 
         println!("Sctp receiver thread started!");
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Receiver Sctp thread"))
+            .spawn(move || {
 
-            // Init a new thread pool that will download the files
-            let mut sender_info = SctpSenderReceiveInfo::new();
+                // Init a new thread pool that will download the files
+                let mut sender_info = SctpSenderReceiveInfo::new();
 
-            // The number of workers will be equal to the incoming stream count of the sctp association
-            let incoming_stream_count = sctp_client.get_sctp_status().sstat_instrms;
+                // The number of workers will be equal to the incoming stream count of the sctp association
+                let incoming_stream_count = sctp_client.get_sctp_status().sstat_instrms;
 
-            let mut download_pool = DownloaderPool::new(incoming_stream_count as usize);
+                let mut download_pool = DownloaderPool::new(incoming_stream_count as usize);
 
-            let mut buffer = vec![0;PACKET_BUFFER_SIZE];
+                let mut buffer = vec![0;PACKET_BUFFER_SIZE];
 
-            loop{
+                loop{
 
-                match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                    match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
-                    Err(error) => return Err(From::from(error)),
+                        Err(error) => return Err(From::from(error)),
 
-                    Ok(0) =>{
-                        println!("Sctp connection closed!");
-                        break;
-                    }
+                        Ok(0) =>{
+                            println!("Sctp connection closed!");
+                            break;
+                        }
 
-                    Ok(bytes_read) => {
+                        Ok(bytes_read) => {
 
-                        let stream_number = sender_info.sinfo_stream;
-                        let byte_packet = BytePacket::from(&buffer[..bytes_read]);
+                            let stream_number = sender_info.sinfo_stream;
+                            let byte_packet = BytePacket::from(&buffer[..bytes_read]);
 
-                        // Send the packet to be downloaded by the designated thread
-                        download_pool.send_packet(byte_packet,stream_number as usize)?;
+                            // Send the packet to be downloaded by the designated thread
+                            download_pool.send_packet(byte_packet,stream_number as usize)?;
 
+
+                        }
 
                     }
 
                 }
 
-            }
-
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
 
     }
 
@@ -461,31 +468,33 @@ impl DownloaderWorker {
     /// Starts the worker thread.
     fn new(id: usize, rx: Receiver<BytePacket>) -> Self {
 
-        let thread = thread::spawn(move || {
+        let thread = thread::Builder::new()
+            .name(format!("Downloader Worker {id}"))
+            .spawn(move || {
 
-            let mut metadata = DownloadingFileMetadata::default();
-            for mut packet in rx {
+                let mut metadata = DownloadingFileMetadata::default();
+                for mut packet in rx {
 
-                let packet_type = FilePacketType::from(packet.read_u8().unwrap());
+                    let packet_type = FilePacketType::from(packet.read_u8().unwrap());
 
-                match packet_type {
-                    FilePacketType::Metadata => metadata = Self::parse_metadata_packet(&mut packet),
-                    FilePacketType::Chunk => Self::parse_chunk_packet(&mut packet,&mut metadata),
-                    FilePacketType::Unknown(code) => {
-                        let packet_size = packet.packet_size();
-                        let residue = packet.read_all().unwrap_or(b"0");
-                        let residue = String::from_utf8_lossy(residue);
+                    match packet_type {
+                        FilePacketType::Metadata => metadata = Self::parse_metadata_packet(&mut packet),
+                        FilePacketType::Chunk => Self::parse_chunk_packet(&mut packet,&mut metadata),
+                        FilePacketType::Unknown(code) => {
+                            let packet_size = packet.packet_size();
+                            let residue = packet.read_all().unwrap_or(b"0");
+                            let residue = String::from_utf8_lossy(residue);
 
-                        eprintln!("Unknown packet type: {} of size {}, rest of packet: {}", code, packet_size,residue);
-                        eprintln!("Last metadata: {:#?}",metadata);
-                    },
+                            eprintln!("Unknown packet type: {} of size {}, rest of packet: {}", code, packet_size,residue);
+                            eprintln!("Last metadata: {:#?}",metadata);
+                        },
+                    }
+
                 }
 
-            }
+                println!("DownloaderWorker thread stopped");
 
-            println!("DownloaderWorker thread stopped");
-
-        });
+            }).unwrap();
 
 
         Self{
@@ -770,32 +779,34 @@ impl SctpRelay{
         let sctp_status = sctp_client.get_sctp_status();
         let outgoing_stream_num = sctp_status.sstat_outstrms;
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Sctp sender thread"))
+            .spawn(move || {
 
-            let mut stream_number = 0u16;
+                let mut stream_number = 0u16;
 
-            for (path,ppid) in sctp_rx {
+                for (path,ppid) in sctp_rx {
 
-                // Sanitize the path
-                let path = match path.trim() {
-                    "/" => "/index.html".to_string(),
-                    _ => {
-                        path.to_string()
-                    }
-                };
-
-
-                // Send the request to the server
-                sctp_client.write_all(path.as_bytes(),stream_number,ppid,0)?;
-
-                // Round-robin over the streams
-                stream_number = (stream_number + 1) % outgoing_stream_num;
+                    // Sanitize the path
+                    let path = match path.trim() {
+                        "/" => "/index.html".to_string(),
+                        _ => {
+                            path.to_string()
+                        }
+                    };
 
 
-            }
+                    // Send the request to the server
+                    sctp_client.write_all(path.as_bytes(),stream_number,ppid,0)?;
 
-            Ok(())
-        })
+                    // Round-robin over the streams
+                    stream_number = (stream_number + 1) % outgoing_stream_num;
+
+
+                }
+
+                Ok(())
+            }).unwrap()
 
     }
 
@@ -804,44 +815,46 @@ impl SctpRelay{
 
         println!("Sctp receiver thread started!");
 
-        thread::spawn(move || {
+        thread::Builder::new()
+            .name(String::from("Sctp receiver thread"))
+            .spawn(move || {
 
-            // Init a new thread pool that will download the files
-            let mut sender_info = SctpSenderReceiveInfo::new();
-            let mut buffer = vec![0;PACKET_BUFFER_SIZE];
+                // Init a new thread pool that will download the files
+                let mut sender_info = SctpSenderReceiveInfo::new();
+                let mut buffer = vec![0;PACKET_BUFFER_SIZE];
 
-            loop{
+                loop{
 
-                match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
+                    match sctp_client.read(&mut buffer,Some(&mut sender_info),None){
 
-                    Err(error) => return Err(From::from(error)),
+                        Err(error) => return Err(From::from(error)),
 
-                    Ok(0) =>{
-                        println!("Sctp connection closed!");
-                        break;
-                    }
+                        Ok(0) =>{
+                            println!("Sctp connection closed!");
+                            break;
+                        }
 
-                    Ok(bytes_read) => {
+                        Ok(bytes_read) => {
 
-                        let ppid = sender_info.sinfo_ppid;
-                        let byte_packet = BytePacket::from(&buffer[..bytes_read]);
+                            let ppid = sender_info.sinfo_ppid;
+                            let byte_packet = BytePacket::from(&buffer[..bytes_read]);
 
-                        // Get the channel of the tcp connection that waits for this packet
-                        let channel_map = channel_map.read().unwrap();
-                        let client_tx = channel_map.get(&ppid).expect("Ppid not in map");
+                            // Get the channel of the tcp connection that waits for this packet
+                            let channel_map = channel_map.read().unwrap();
+                            let client_tx = channel_map.get(&ppid).expect("Ppid not in map");
 
-                        match client_tx.send(byte_packet){
-                            _ => ()
+                            match client_tx.send(byte_packet){
+                                _ => ()
+                            }
+
                         }
 
                     }
 
                 }
 
-            }
-
-            Ok(())
-        })
+                Ok(())
+            }).unwrap()
 
     }
 

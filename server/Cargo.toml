@@ -3,6 +3,9 @@ name = "sctp_web_server"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+debug = true
+
+
 [dependencies]
-libc = "0.2.159"
 utils = {path = "../utils"}

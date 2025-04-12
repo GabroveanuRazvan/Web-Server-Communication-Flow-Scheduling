@@ -1,18 +1,26 @@
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::LazyLock;
-use std::thread;
-use path_clean::PathClean;
-use utils::logger::Logger;
+use std::thread::sleep;
+use std::time::Duration;
+use utils::pools::thread_pool::ThreadPool;
+#[inline(never)]
+fn add(mut num : u128){
+    sleep(Duration::from_millis(num as u64));
+    loop{
+        num = num.wrapping_add(1);
 
+    }
 
-fn child_job(s: &mut String) {
-    *s = s.to_uppercase();
 }
+
+
 fn main(){
 
-    let arr = [12;5];
+    let pool = ThreadPool::new(12);
+
+    for i in 0..12{
+        pool.execute(move||{
+            add(i);
+        })
+    }
 
 }
 
