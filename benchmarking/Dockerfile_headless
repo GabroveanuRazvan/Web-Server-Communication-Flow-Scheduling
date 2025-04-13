@@ -1,0 +1,12 @@
+FROM python:3.13.2-slim
+
+WORKDIR /locust
+COPY benchmark_dataset ./bencbenchmark_dataset
+COPY locust_benchmark_scripts ./locust_benchmark_scripts
+COPY requirements.txt .
+COPY locust_script.py .
+
+RUN mkdir "results_headless"
+RUN pip install -r requirements.txt
+
+CMD python locust_script.py

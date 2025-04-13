@@ -8,6 +8,7 @@
 **/__pycache__
 
 benchmarking/results/results*
+benchmarking/results_headless/Run*
 **/perf.data
 **/flamegraph.svg
 **/results/

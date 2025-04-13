@@ -2,8 +2,8 @@ services:
   locust:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: locust
+      dockerfile: Dockerfile_web
+    container_name: locust_web
     tty: true
     ports:
       - "8089:8089/tcp"

@@ -7,15 +7,17 @@ def add_throughput(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-NUM_RUNS = 3
+NUM_RUNS = 4
 LOCUST_FILE_PATH = "./locust_benchmark_scripts/locust_random_client.py"
 NUM_USERS = 6
 SPAWN_RATE = NUM_USERS
-HOST = "http://192.168.1.144:7878"
+HOST = "http://192.168.1.143:7878"
 RUN_TIME = "5s"
-CSV_ROOT = "./results"
+CSV_ROOT = "./results_headless"
 RESULT_DIR_NAME = f"Run{{}}_U{{}}_T{{}}"
 CSV_FILE_NAME = f"Run{{}}"
+
+os.makedirs(CSV_ROOT, exist_ok=True)
 
 
 for run in range(1,NUM_RUNS+1):

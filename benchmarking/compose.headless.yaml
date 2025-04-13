@@ -1,0 +1,12 @@
+services:
+  locust:
+    build:
+      context: .
+      dockerfile: Dockerfile_headless
+    container_name: locust_headless
+    tty: true
+    volumes:
+      - ./locust_benchmark_scripts:/locust/locust_benchmark_scripts
+      - ./benchmark_dataset:/locust/benchmark_dataset
+      - ./results_headless:/locust/results_headless
+      - ./locust_script.py:/locust/locust_script.py
