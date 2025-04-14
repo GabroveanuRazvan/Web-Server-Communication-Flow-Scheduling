@@ -23,6 +23,10 @@
       <excludeFolder url="file://$MODULE_DIR$/test_things/mytmpfs" />
       <excludeFolder url="file://$MODULE_DIR$/benchmarking/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/scripts/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/benchmarking/results_headless/Run1_U6_T5s" />
+      <excludeFolder url="file://$MODULE_DIR$/benchmarking/results_headless/Run2_U7_T5s" />
+      <excludeFolder url="file://$MODULE_DIR$/benchmarking/results_headless/Run3_U8_T5s" />
+      <excludeFolder url="file://$MODULE_DIR$/benchmarking/results_headless/Run4_U9_T5s" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

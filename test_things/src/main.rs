@@ -1,26 +1,14 @@
+use std::io::{Cursor, Write};
 use std::thread::sleep;
 use std::time::Duration;
 use utils::pools::thread_pool::ThreadPool;
-#[inline(never)]
-fn add(mut num : u128){
-    sleep(Duration::from_millis(num as u64));
-    loop{
-        num = num.wrapping_add(1);
-
-    }
-
-}
-
 
 fn main(){
 
-    let pool = ThreadPool::new(12);
+    let bytes = vec![0u8;1];
+    let mut cursor = Cursor::new(bytes);
+    cursor.write(&32u64.to_ne_bytes()).unwrap();
 
-    for i in 0..12{
-        pool.execute(move||{
-            add(i);
-        })
-    }
-
+    println!("{:?}",cursor);
 }
 
