@@ -12,23 +12,26 @@ def add_throughput_history(df: pd.DataFrame) -> pd.DataFrame:
     df["Throughput/s"] = (df["Requests/s"] * df["Total Average Content Size"]).round(6)
     return df
 
-
-NUM_RUNS = 3
+RUN_TITLE = "Run"
+NUM_RUNS = 12
 LOCUST_FILE_PATH = "./locust_benchmark_scripts/locust_random_client.py"
-NUM_USERS = 6
+NUM_USERS = 1
 SPAWN_RATE = NUM_USERS
 HOST = "http://192.168.1.143:7878"
-RUN_TIME = "10s"
+RUN_TIME = "120s"
 CSV_ROOT = "./results_headless"
-RESULT_DIR_NAME = f"Run{{}}_U{{}}_T{{}}"
-CSV_FILE_NAME = f"Run{{}}"
+RESULT_DIR_NAME = f"{RUN_TITLE}{{}}_U{{}}_T{{}}"
+CSV_FILE_NAME = f"{RUN_TITLE}{{}}"
 
 USE_FULL_CSV_HISTORY = True
-THROUGHPUT_PLOT_FILE_NAME = f"Run{{}}_throughput.png"
+THROUGHPUT_PLOT_FILE_NAME = f"{RUN_TITLE}{{}}_throughput.png"
+THROUGHPUT_ALL_FILE_NAME = f"{RUN_TITLE}_throughput_all.png"
 
 
 os.makedirs(CSV_ROOT, exist_ok=True)
 
+
+fig_global,plt_global = plt.subplots()
 
 for run in range(1,NUM_RUNS+1):
     print(f"Run {run} started.")
@@ -83,29 +86,40 @@ for run in range(1,NUM_RUNS+1):
     if USE_FULL_CSV_HISTORY:
         # Drop rows having N/A values
         df = pd.read_csv(history_file_path).dropna(subset=["50%"])
-        # Keep only the aggregates stats
+        # Keep only the aggregated stats
         df = df[df['Name'] == "Aggregated"]
 
+        # Normalize the timestamp
         seconds_column = df["Timestamp"] - df["Timestamp"].iloc[0]
 
         # Convert the timestamp to datetime format
         df["Timestamp"] = df["Timestamp"].apply(lambda t: datetime.fromtimestamp(t).strftime("%H:%M:%S"))
+
         # Compute the throughput
         df = add_throughput_history(df)
         df.to_csv(history_file_path, index=False)
+        fig_local, plt_local = plt.subplots()
 
-        # Plot the results in time
-        plt.plot(seconds_column, df["Throughput/s"], label="Throughput/sec", marker=".")
+        # Plot the results of the throughput in time on the local figure
+        plt_local.plot(seconds_column, df["Throughput/s"], label="Throughput/sec", marker=".")
 
-        plt.title("Average throughput in time")
-        plt.xlabel("Timestamp in seconds")
-        plt.ylabel("Throughput in bytes")
+        plt_local.set_title("Average throughput in time")
+        plt_local.set_xlabel("Timestamp in seconds")
+        plt_local.set_ylabel("Throughput in bytes")
+        plt_local.legend()
 
         plot_file_path = os.path.join(CSV_ROOT,result_dir, THROUGHPUT_PLOT_FILE_NAME.format(run))
-        plt.savefig(plot_file_path)
+        fig_local.savefig(plot_file_path)
 
-        plt.clf()
+        # Add the throughput results to the global figure
+        plt_global.plot(seconds_column, df["Throughput/s"], label=str(run), marker=".")
+        plt_global.set_title("Average throughput in time")
+        plt_global.set_xlabel("Timestamp in seconds")
+        plt_global.set_ylabel("Throughput in bytes")
+        plt_global.legend()
 
+global_plot_file_path = os.path.join(CSV_ROOT, THROUGHPUT_ALL_FILE_NAME)
+fig_global.savefig(global_plot_file_path)
 
 
 
