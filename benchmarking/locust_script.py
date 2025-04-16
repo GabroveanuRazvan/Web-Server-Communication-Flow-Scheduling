@@ -12,13 +12,13 @@ def add_throughput_history(df: pd.DataFrame) -> pd.DataFrame:
     df["Throughput/s"] = (df["Requests/s"] * df["Total Average Content Size"]).round(6)
     return df
 
-RUN_TITLE = "Run"
-NUM_RUNS = 12
+RUN_TITLE = "Test"
+NUM_RUNS = 4
 LOCUST_FILE_PATH = "./locust_benchmark_scripts/locust_random_client.py"
-NUM_USERS = 1
+NUM_USERS = 6
 SPAWN_RATE = NUM_USERS
 HOST = "http://192.168.1.143:7878"
-RUN_TIME = "120s"
+RUN_TIME = "7s"
 CSV_ROOT = "./results_headless"
 RESULT_DIR_NAME = f"{RUN_TITLE}{{}}_U{{}}_T{{}}"
 CSV_FILE_NAME = f"{RUN_TITLE}{{}}"
@@ -26,14 +26,17 @@ CSV_FILE_NAME = f"{RUN_TITLE}{{}}"
 USE_FULL_CSV_HISTORY = True
 THROUGHPUT_PLOT_FILE_NAME = f"{RUN_TITLE}{{}}_throughput.png"
 THROUGHPUT_ALL_FILE_NAME = f"{RUN_TITLE}_throughput_all.png"
-
+AVG_THROUGHPUT_FILE_NAME = f"{RUN_TITLE}_throughput_avg.png"
 
 os.makedirs(CSV_ROOT, exist_ok=True)
 
 
 fig_global,plt_global = plt.subplots()
+fig_avg_throughput,plt_avg_throughput = plt.subplots()
+runs = list(range(1,NUM_RUNS+1))
+avg_throughput = []
 
-for run in range(1,NUM_RUNS+1):
+for run in runs:
     print(f"Run {run} started.")
 
     # Build the locust args and resolve the used paths
@@ -81,7 +84,10 @@ for run in range(1,NUM_RUNS+1):
     # Compute the throughput for each stat
     df = pd.read_csv(stats_file_path)
     df = add_throughput_stats(df)
-    df.to_csv(stats_file_path, index=False)
+    df.to_csv(stats_file_path,index=False)
+
+    current_avg_throughput = df[df["Name"] == "Aggregated"].iloc[0]["Throughput/s"]
+    avg_throughput.append(current_avg_throughput)
 
     if USE_FULL_CSV_HISTORY:
         # Drop rows having N/A values
@@ -118,9 +124,18 @@ for run in range(1,NUM_RUNS+1):
         plt_global.set_ylabel("Throughput in bytes")
         plt_global.legend()
 
+# Save the global plot
 global_plot_file_path = os.path.join(CSV_ROOT, THROUGHPUT_ALL_FILE_NAME)
 fig_global.savefig(global_plot_file_path)
 
+# Compute the average throughput across runs plot
+plt_avg_throughput.plot(runs,avg_throughput,label= "Average throughput across runs", marker = '.')
+plt_avg_throughput.set_title("Average throughput across runs")
+plt_avg_throughput.set_xlabel("Run index")
+plt_avg_throughput.set_ylabel("Throughput in bytes")
+
+plot_file_path = os.path.join(CSV_ROOT, AVG_THROUGHPUT_FILE_NAME)
+fig_avg_throughput.savefig(plot_file_path)
 
 
 # locust --headless --locustfile ./locust_benchmark_scripts/locust_random_client.py --users 6 --spawn-rate 6.0 --host http://192.168.1.144:7878 --run-time 60s --skip-log
