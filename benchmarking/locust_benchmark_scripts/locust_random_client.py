@@ -2,7 +2,7 @@ from locust import HttpUser, task, constant
 import os
 import numpy as np
 
-root = "./benchmark_dataset"
+root = "./benchmark_raw_dataset"
 dirs = [os.path.join(root,current_dir) for current_dir in os.listdir(root)]
 
 

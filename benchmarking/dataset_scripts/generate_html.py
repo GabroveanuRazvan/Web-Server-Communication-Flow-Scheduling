@@ -25,7 +25,7 @@ def flatten_dir(current_dir: str):
 root_dir = "./benchmark_dataset"
 htmls_dir_name =  "html_pages"
 html_dir_path = os.path.join(root_dir, htmls_dir_name)
-html_template_path = "./template.html"
+html_template_path = "template_images.html"
 
 img_content = """ <img src="{path}" width="100" height="100" alt="not working"> """
 

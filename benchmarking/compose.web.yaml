@@ -11,5 +11,6 @@ services:
       - ./locust_benchmark_scripts:/locust/locust_benchmark_scripts
       - ./benchmark_dataset:/locust/benchmark_dataset
       - ./results:/locust/results
+      - ./benchmark_raw_dataset:/locust/benchmark_raw_dataset
 #    command:
 #      - locust -f locust_benchmark_scripts/locust_random_client.py --csv /locust/results/results
