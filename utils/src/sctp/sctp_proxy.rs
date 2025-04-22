@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write};
 use std;
-use std::fmt::format;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
@@ -371,8 +370,8 @@ impl SctpProxyBuilder {
 #[derive(Debug)]
 struct DownloadingFileMetadata {
     writer: Option<BufWriter<File>>,
-    total_chunks: u16,
-    current_chunks: u16,
+    file_size: u64,
+    current_file_size: u64,
     download_path: PathBuf,
     downloaded_path: PathBuf,
 }
@@ -380,11 +379,11 @@ struct DownloadingFileMetadata {
 impl DownloadingFileMetadata {
 
     /// Create a new metadata structure
-    fn new(writer: BufWriter<File>, total_chunks: u16, download_path: PathBuf,downloaded_path: PathBuf) -> Self {
+    fn new(writer: BufWriter<File>, file_size: u64, download_path: PathBuf,downloaded_path: PathBuf) -> Self {
         Self{
             writer: Some(writer),
-            total_chunks,
-            current_chunks: 0,
+            file_size,
+            current_file_size: 0,
             download_path,
             downloaded_path,
         }
@@ -395,8 +394,8 @@ impl Default for DownloadingFileMetadata {
     fn default() -> Self {
         Self{
             writer: None,
-            total_chunks: 0,
-            current_chunks: 0,
+            file_size: 0,
+            current_file_size: 0,
             download_path: PathBuf::new(),
             downloaded_path: PathBuf::new(),
         }
@@ -475,19 +474,11 @@ impl DownloaderWorker {
                 let mut metadata = DownloadingFileMetadata::default();
                 for mut packet in rx {
 
-                    let packet_type = FilePacketType::from(packet.read_u8().unwrap());
-
-                    match packet_type {
-                        FilePacketType::Metadata => metadata = Self::parse_metadata_packet(&mut packet),
-                        FilePacketType::Chunk => Self::parse_chunk_packet(&mut packet,&mut metadata),
-                        FilePacketType::Unknown(code) => {
-                            let packet_size = packet.packet_size();
-                            let residue = packet.read_all().unwrap_or(b"0");
-                            let residue = String::from_utf8_lossy(residue);
-
-                            eprintln!("Unknown packet type: {} of size {}, rest of packet: {}", code, packet_size,residue);
-                            eprintln!("Last metadata: {:#?}",metadata);
-                        },
+                    if metadata.file_size == 0 {
+                        metadata = Self::parse_metadata_packet(&mut packet);
+                    }
+                    else{
+                        Self::parse_chunk_packet(&mut packet,&mut metadata)
                     }
 
                 }
@@ -506,8 +497,7 @@ impl DownloaderWorker {
     /// Parses an already identified metadata packet.
     fn parse_metadata_packet(byte_packet: &mut BytePacket) -> DownloadingFileMetadata {
 
-        let total_chunks = byte_packet.read_u16().unwrap();
-        let _file_size = byte_packet.read_u64().unwrap();
+        let file_size = byte_packet.read_u64().unwrap();
         let server_file_path = String::from_utf8_lossy(byte_packet.read_all().unwrap());
         let download_path = SctpProxy::cache_downloading_path(&server_file_path);
         let downloaded_path = SctpProxy::cache_downloaded_path(&server_file_path);
@@ -520,7 +510,7 @@ impl DownloaderWorker {
 
         let writer = BufWriter::new(file);
 
-        DownloadingFileMetadata::new(writer, total_chunks, download_path, downloaded_path)
+        DownloadingFileMetadata::new(writer, file_size, download_path, downloaded_path)
 
     }
 
@@ -529,19 +519,19 @@ impl DownloaderWorker {
 
         // Extract the packet data
         let file_chunk = byte_packet.read_all().unwrap();
-
         let writer = file_metadata.writer.as_mut().unwrap();
 
         // Write the chunk
         writer.write_all(file_chunk).unwrap();
 
-        file_metadata.current_chunks += 1;
+        file_metadata.current_file_size += file_chunk.len() as u64;
 
         // File ended to download
-        if file_metadata.total_chunks == file_metadata.current_chunks{
+        if file_metadata.file_size == file_metadata.current_file_size{
+            // Reset the file_size of the metadata
+            file_metadata.file_size = 0;
             // Flush the contents of the buffer into the file, drop the buffer and the active mutexes
             writer.flush().unwrap();
-
             fs::rename(file_metadata.download_path.as_path(), file_metadata.downloaded_path.as_path()).unwrap();
         }
 
@@ -683,9 +673,8 @@ impl SctpRelay{
                     sctp_tx.send((file_name, ppid)).unwrap();
 
                     // File metadata
-                    let mut total_chunks = 0;
+                    let mut current_file_size = 0;
                     let mut file_size = 0;
-                    let mut current_chunks = 0;
 
                     // Receive the incoming packets from the sctp client
                     'packet_loop: loop{
@@ -695,51 +684,45 @@ impl SctpRelay{
                             Err(_) => break 'packet_loop,
                         };
 
-                        let packet_type = FilePacketType::from(byte_packet.read_u8().unwrap());
 
-                        match packet_type{
+                        // Expecting a metadata packet when there is no current file size
+                        if file_size == 0{
+                            file_size = Self::parse_metadata_packet(&mut byte_packet);
+                            current_file_size = 0;
 
-                            FilePacketType::Metadata => {
+                            // Send the response header of given size
+                            let http_response = basic_http_response(file_size as usize);
+                            let string_response = http_response_to_string(http_response);
 
-                                (total_chunks,file_size) = Self::parse_metadata_packet(&mut byte_packet);
-                                current_chunks = 0;
-
-                                // Send the response header of given size
-                                let http_response = basic_http_response(file_size as usize);
-                                let string_response = http_response_to_string(http_response);
-
-                                // Check for broken pipe error in case the browser abruptly shut down the connection
-                                if let Err(error) = stream.write_all(string_response.as_bytes()){
-                                    if error.kind() == ErrorKind::BrokenPipe{
-                                        break 'stream_loop;
-                                    }
+                            // Check for broken pipe error in case the browser abruptly shut down the connection
+                            if let Err(error) = stream.write_all(string_response.as_bytes()){
+                                if error.kind() == ErrorKind::BrokenPipe{
+                                    break 'stream_loop;
                                 }
-
                             }
-
-                            FilePacketType::Chunk => {
-
-                                // Send the chunk
-                                let file_chunk = Self::parse_chunk_packet(&mut byte_packet);
-
-                                if let Err(error) = stream.write_all(file_chunk){
-                                    if error.kind() == ErrorKind::BrokenPipe{
-                                        println!("Broken pipe");
-                                        break 'stream_loop;
-                                    }
-                                }
-
-                                current_chunks += 1;
-
-                                // Break the packet loop
-                                if current_chunks == total_chunks{
-                                    break 'packet_loop;
-                                }
-
-                            }
-
-                            FilePacketType::Unknown(code) => eprintln!("Unknown file type: {code}"),
                         }
+                        else{
+
+                            // Send the chunk
+                            let file_chunk = Self::parse_chunk_packet(&mut byte_packet);
+
+                            if let Err(error) = stream.write_all(file_chunk){
+                                if error.kind() == ErrorKind::BrokenPipe{
+                                    println!("Broken pipe");
+                                    break 'stream_loop;
+                                }
+                            }
+
+                            current_file_size += file_chunk.len() as u64;
+
+                            // Break the packet loop
+                            if file_size == current_file_size{
+                                file_size = 0;
+                                break 'packet_loop;
+                            }
+
+                        }
+
 
                     }
 
@@ -754,13 +737,8 @@ impl SctpRelay{
     }
 
     /// Parses an already identified metadata packet.
-    fn parse_metadata_packet(byte_packet: &mut BytePacket) -> (u16,u64) {
-
-        let total_chunks = byte_packet.read_u16().unwrap();
-        let file_size = byte_packet.read_u64().unwrap();
-
-        (total_chunks,file_size)
-
+    fn parse_metadata_packet(byte_packet: &mut BytePacket) -> u64 {
+       byte_packet.read_u64().unwrap()
     }
 
     /// Parses an already identified chunk packet.

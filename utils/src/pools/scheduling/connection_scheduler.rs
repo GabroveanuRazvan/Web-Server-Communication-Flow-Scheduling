@@ -206,37 +206,19 @@ impl ConnectionWorker{
                         let path_bytes = &path.as_bytes()[1..];
                         let file_size = file_buffer.mmap_as_slice().len();
 
-                        // Ceil formula for integers
-                        let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
-                        // Send a metadata packet made out of packet type + total chunks + file_size + file_path
+                        // Send a metadata packet made out of packet file_size + file_path
                         let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
-                        metadata_packet.write_u8(FilePacketType::Metadata.into()).unwrap();
-                        metadata_packet.write_u16(chunk_count as u16).unwrap();
                         metadata_packet.write_u64(file_size as u64).unwrap();
-
                         unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
-
                         stream.write_all(metadata_packet.get_buffer(),stream_number,ppid,0).unwrap();
 
 
                         // Iterate through each chunk and send the packets
-                        for (chunk_index,chunk) in file_buffer.mmap_as_slice().chunks(chunk_size).enumerate(){
+                        for chunk in file_buffer.mmap_as_slice().chunks(chunk_size){
 
-                            // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
-                            let mut chunk_packet = if chunk_index != chunk_count - 1 {
-                                BytePacket::new(packet_size)
-
-                            }
-                            else{
-                                BytePacket::new(chunk.len() + CHUNK_METADATA_SIZE)
-                            };
-
-                            chunk_packet.write_u8(FilePacketType::Chunk.into()).unwrap();
-                            unsafe{ chunk_packet.write_buffer(chunk).unwrap(); }
-
-                            // Send the chunk
-                            match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
+                            // Just send the raw chunk
+                            match stream.write_all(chunk,stream_number,ppid,0){
                                 Ok(_bytes) => (),
                                 Err(e) => eprintln!("Write Error: {:?}",e)
                             }

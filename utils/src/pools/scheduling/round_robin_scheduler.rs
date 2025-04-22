@@ -45,9 +45,8 @@ impl RoundRobinScheduler {
         let job_index = self.round_robin_counter;
         self.round_robin_counter = (self.round_robin_counter + 1) % self.num_workers;
 
-        // 1 byte off coming from the chunk packet type
+        // Get owned metadata variables
         let chunk_size = self.packet_size - CHUNK_METADATA_SIZE;
-        let packet_size = self.packet_size;
         let stream = Arc::clone(&self.stream);
 
         self.worker_pool.execute(job_index, move || {
@@ -57,13 +56,10 @@ impl RoundRobinScheduler {
             let file_size = file_buffer.len();
             let stream_number = job_index as u16;
 
-            // Ceil formula for integers
-            let chunk_count = (file_size + chunk_size - 1) / chunk_size;
 
-            // Send a metadata packet made out of packet type + total chunks + file_size + file_path
+
+            // Send a metadata packet made out of file_size + file_path
             let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
-            metadata_packet.write_u8(FilePacketType::Metadata.into()).unwrap();
-            metadata_packet.write_u16(chunk_count as u16).unwrap();
             metadata_packet.write_u64(file_size as u64).unwrap();
             unsafe{metadata_packet.write_buffer(&path_bytes).unwrap();}
 
@@ -71,22 +67,10 @@ impl RoundRobinScheduler {
 
 
             // Iterate through each chunk and send the packets
-            for (chunk_index,chunk) in file_buffer.chunks(chunk_size).enumerate(){
+            for chunk in file_buffer.chunks(chunk_size){
 
-                // Build the file chunk packet consisting of: current chunk index + total chunk count + chunk size + chunk data
-                let mut chunk_packet = if chunk_index != chunk_count - 1 {
-                    BytePacket::new(packet_size)
-
-                }
-                else{
-                    BytePacket::new(chunk.len() + CHUNK_METADATA_SIZE)
-                };
-
-                chunk_packet.write_u8(FilePacketType::Chunk.into()).unwrap();
-                unsafe{ chunk_packet.write_buffer(chunk).unwrap(); }
-
-                // Send the chunk
-                match stream.write_all(chunk_packet.get_buffer(),stream_number,ppid,chunk_index as u32){
+                // Just send the raw chunk
+                match stream.write_all(chunk,stream_number,ppid,0){
                     Ok(_bytes) => (),
                     Err(e) => eprintln!("Write Error: {:?}",e)
                 }

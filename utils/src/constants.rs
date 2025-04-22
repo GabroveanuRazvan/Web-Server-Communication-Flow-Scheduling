@@ -40,5 +40,5 @@ pub const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 /// ////////////////////
 
 
-pub const METADATA_STATIC_SIZE: usize = 11 * BYTE;
-pub const CHUNK_METADATA_SIZE: usize = 1 * BYTE;
+pub const METADATA_STATIC_SIZE: usize = 8 * BYTE;
+pub const CHUNK_METADATA_SIZE: usize = 0 * BYTE;
