@@ -19,7 +19,7 @@ pub struct ConnectionScheduler{
 
     heap: Arc<(Mutex<Option<BinaryHeap<Reverse<(MappedFile,String,u32)>>>>,Condvar)>,
     stream: Arc<SctpStream>,
-    workers: Vec<BenchmarkConnectionWorker>,
+    workers: Vec<ConnectionWorker>,
     buffer_size: usize,
 
 }
@@ -36,7 +36,7 @@ impl ConnectionScheduler{
         let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())), Condvar::new()));
 
         for i in 0..num_workers {
-            workers.push(BenchmarkConnectionWorker::new(i, Arc::clone(&heap), Arc::clone(&stream), packet_size));
+            workers.push(ConnectionWorker::new(i, Arc::clone(&heap), Arc::clone(&stream), packet_size));
         }
 
         Self{

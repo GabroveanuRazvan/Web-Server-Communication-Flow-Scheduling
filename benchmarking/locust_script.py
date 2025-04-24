@@ -18,9 +18,11 @@ LOCUST_FILE_PATH = "./locust_benchmark_scripts/locust_random_client.py"
 NUM_USERS = 6
 SPAWN_RATE = NUM_USERS
 HOST = "http://192.168.100.118:7878"
-RUN_TIME = "60s"
-CSV_ROOT = "./results_headless"
+RUN_TIME = "7s"
+RESULTS_ROOT = "./results_headless"
+RUN_ROOT = os.path.join(RESULTS_ROOT, RUN_TITLE)
 RESULT_DIR_NAME = f"{RUN_TITLE}{{}}_U{{}}_T{{}}"
+PLOT_RESULT_DIR_NAME = f"{RUN_TITLE}_Plots"
 CSV_FILE_NAME = f"{RUN_TITLE}{{}}"
 
 USE_FULL_CSV_HISTORY = True
@@ -28,7 +30,7 @@ THROUGHPUT_PLOT_FILE_NAME = f"{RUN_TITLE}{{}}_throughput.png"
 THROUGHPUT_ALL_FILE_NAME = f"{RUN_TITLE}_throughput_all.png"
 AVG_THROUGHPUT_FILE_NAME = f"{RUN_TITLE}_throughput_avg.png"
 
-os.makedirs(CSV_ROOT, exist_ok=True)
+os.makedirs(RUN_ROOT, exist_ok=True)
 
 
 fig_global,plt_global = plt.subplots()
@@ -42,7 +44,7 @@ for run in runs:
     # Build the locust args and resolve the used paths
     result_dir = RESULT_DIR_NAME.format(run, NUM_USERS, RUN_TIME)
     csv_file_name = CSV_FILE_NAME.format(run)
-    results_path = os.path.join(CSV_ROOT,result_dir,csv_file_name)
+    results_path = os.path.join(RUN_ROOT, result_dir, csv_file_name)
 
     stats_file_path = results_path + "_stats.csv"
     history_file_path = results_path + "_stats_history.csv"
@@ -114,7 +116,7 @@ for run in runs:
         plt_local.set_ylabel("Throughput in bytes")
         plt_local.legend()
 
-        plot_file_path = os.path.join(CSV_ROOT,result_dir, THROUGHPUT_PLOT_FILE_NAME.format(run))
+        plot_file_path = os.path.join(RUN_ROOT, result_dir, THROUGHPUT_PLOT_FILE_NAME.format(run))
         fig_local.savefig(plot_file_path)
 
         # Add the throughput results to the global figure
@@ -125,7 +127,9 @@ for run in runs:
         plt_global.legend()
 
 # Save the global plot
-global_plot_file_path = os.path.join(CSV_ROOT, THROUGHPUT_ALL_FILE_NAME)
+global_plot_dir_path = os.path.join(RUN_ROOT, PLOT_RESULT_DIR_NAME)
+global_plot_file_path = os.path.join(global_plot_dir_path, THROUGHPUT_ALL_FILE_NAME)
+os.makedirs(global_plot_dir_path, exist_ok=True)
 fig_global.savefig(global_plot_file_path)
 
 # Compute the average throughput across runs plot
@@ -134,7 +138,9 @@ plt_avg_throughput.set_title("Average throughput across runs")
 plt_avg_throughput.set_xlabel("Run index")
 plt_avg_throughput.set_ylabel("Throughput in bytes")
 
-plot_file_path = os.path.join(CSV_ROOT, AVG_THROUGHPUT_FILE_NAME)
+plot_dir_path = os.path.join(RUN_ROOT, PLOT_RESULT_DIR_NAME)
+plot_file_path = os.path.join(plot_dir_path,AVG_THROUGHPUT_FILE_NAME)
+os.makedirs(plot_dir_path, exist_ok=True)
 fig_avg_throughput.savefig(plot_file_path)
 
 
