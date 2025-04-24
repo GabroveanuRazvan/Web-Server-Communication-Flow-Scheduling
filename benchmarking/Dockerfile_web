@@ -1,5 +1,11 @@
 FROM python:3.13.2-slim
 
+ARG UID
+ARG GID
+
+RUN addgroup --gid $GID locustgroup && \
+    adduser --uid $UID --gid $GID --disabled-password locustuser
+
 WORKDIR /locust
 
 COPY requirements.txt .

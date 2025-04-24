@@ -1,5 +1,13 @@
 FROM python:3.13.2-slim
 
+ARG UID
+ARG GID
+
+RUN addgroup --gid $GID locustgroup && \
+    adduser --uid $UID --gid $GID --disabled-password locustuser
+
+
+
 WORKDIR /locust
 COPY benchmark_dataset ./bencbenchmark_dataset
 COPY benchmark_raw_dataset ./benchmark_raw_dataset
@@ -10,5 +18,8 @@ COPY locust_script.py .
 
 RUN mkdir "results_headless"
 RUN pip install -r requirements.txt
+
+# Use the user after installing the requiremets
+USER locustuser
 
 CMD python locust_script.py

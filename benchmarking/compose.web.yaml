@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile_web
+      args:
+        UID: 1000
+        GID: 1000
     container_name: locust_web
     tty: true
     ports:
