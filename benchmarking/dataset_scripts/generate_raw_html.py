@@ -48,7 +48,7 @@ BYTE = 1
 KILOBYTE = 1024 * BYTE
 MEGABYTE = 1024 * KILOBYTE
 
-NUM_FILES_PER_INTERVAL = 10
+NUM_FILES_PER_INTERVAL = 50
 TEMPLATE_PATH = "./template_raw.html"
 SAVE_PATH = "../benchmark_raw_dataset"
 
