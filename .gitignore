@@ -5,10 +5,13 @@
 .idea/
 .vscode/
 
+./test_things
+
 **/__pycache__
 
 benchmarking/results/results*
 benchmarking/results_headless/*
+
 **/perf.data
 **/flamegraph.svg
 **/results/

@@ -1,14 +1,12 @@
-use std::io::{Cursor, Write};
-use std::thread::sleep;
-use std::time::Duration;
-use utils::pools::thread_pool::ThreadPool;
+use std::fs::create_dir_all;
+use std::path::Path;
 
-fn main(){
-
-    let bytes = vec![0u8;1];
-    let mut cursor = Cursor::new(bytes);
-    cursor.write(&32u64.to_ne_bytes()).unwrap();
-
-    println!("{:?}",cursor);
+fn main() {
+    
+    let path = Path::new("mere");
+    let parent = path.parent();
+    create_dir_all("").unwrap();
+    
+    println!("{:?}", parent);
+    
 }
-
