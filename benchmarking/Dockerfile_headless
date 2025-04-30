@@ -3,11 +3,6 @@ FROM python:3.13.2-slim
 ARG UID
 ARG GID
 
-RUN addgroup --gid $GID locustgroup && \
-    adduser --uid $UID --gid $GID --disabled-password locustuser
-
-
-
 WORKDIR /locust
 COPY benchmark_dataset ./bencbenchmark_dataset
 COPY benchmark_raw_dataset ./benchmark_raw_dataset
@@ -15,6 +10,10 @@ COPY locust_benchmark_scripts ./locust_benchmark_scripts
 COPY requirements.txt .
 COPY locust_script.py .
 
+
+RUN if [ -n]
+RUN addgroup --gid $GID locustgroup && \
+    adduser --uid $UID --gid $GID --disabled-password locustuser
 
 RUN mkdir "results_headless"
 RUN pip install -r requirements.txt

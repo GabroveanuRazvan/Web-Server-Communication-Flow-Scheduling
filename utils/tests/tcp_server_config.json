@@ -1,0 +1,7 @@
+{
+  "address": "0.0.0.0",
+  "port": 7878,
+  "thread_count": 12,
+  "server_root": "./web_files",
+  "file_packet_size": 16384
+}

@@ -1,6 +1,6 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4};
-use utils::tcp_proxy::TcpProxyBuilder;
+use utils::tcp::tcp_proxy::TcpProxyBuilder;
 use io::Result;
 use utils::config::sctp_proxy_config::SctpProxyConfig;
 

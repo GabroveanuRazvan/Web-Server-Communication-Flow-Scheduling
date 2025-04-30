@@ -628,7 +628,7 @@ impl SctpRelay{
     /// Reads a request and sends it to the sctp client to fetch. Wait to receive each packet and forwards it to the tcp client.
     fn handle_client(mut stream: TcpStream, sctp_tx: Sender<(String,u32)>, channel_map: Arc<RwLock<HashMap<u32,Sender<BytePacket>>>>, ppid: u32) -> Result<()>{
 
-        let mut buffer = vec![0; REQUEST_BUFFER_SIZE];
+        let mut buffer = [0u8; REQUEST_BUFFER_SIZE];
 
         let (tcp_tx,tcp_rx) = mpsc::channel();
 
@@ -643,7 +643,7 @@ impl SctpRelay{
             match stream.read(&mut buffer){
 
                 // Connection reset, just break the loop
-                Err(ref error) if error.kind() == ErrorKind::ConnectionReset => break,
+                Err(ref error) if error.kind() == ErrorKind::ConnectionReset => break 'stream_loop,
                 Err(error) => return Err(error),
 
                 Ok(0) => {

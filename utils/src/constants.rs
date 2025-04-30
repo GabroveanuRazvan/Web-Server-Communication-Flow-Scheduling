@@ -35,6 +35,13 @@ pub const REQUEST_BUFFER_SIZE: usize = 4 * KILOBYTE;
 pub const INOTIFY_BUFFER_SIZE: usize = 16 * KILOBYTE;
 pub const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 
+
+/// /////////////////////////////
+/// Tcp server configuration ////
+/// /////////////////////////////
+pub const TCP_SERVER_CONFIG_PATH_ENV: &str = "TCP_SERVER_CONFIG_PATH";
+pub const DEFAULT_TCP_SERVER_CONFIG_PATH: &str = "./server_config.json";
+
 /// //////////////////////
 /// Schedulers macros ///
 /// ////////////////////

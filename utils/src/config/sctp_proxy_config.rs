@@ -27,7 +27,7 @@ pub struct SctpProxyConfig{
 
 impl SctpProxyConfig {
 
-    pub fn get_config() -> &'static SctpProxyConfig {
+    pub fn get_config() -> &'static Self {
 
         SCTP_PROXY_CONFIG.get_or_init(||{
 

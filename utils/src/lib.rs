@@ -33,13 +33,18 @@ pub mod config{
     pub mod sctp_server_config;
     pub mod serialization;
     pub mod sctp_proxy_config;
+    pub mod tcp_server_config;
+}
+
+pub mod tcp{
+    pub mod tcp_proxy;
+    pub mod tcp_server;
 }
 
 pub mod libc_wrappers;
 pub mod http_parsers;
 pub mod mapped_file;
 pub mod constants;
-pub mod tcp_proxy;
 pub mod shared_memory;
 pub mod html_prefetch_service;
 pub mod logger;

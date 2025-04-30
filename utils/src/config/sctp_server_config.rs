@@ -7,7 +7,7 @@ use crate::config::serialization::load;
 use crate::constants::{KILOBYTE,DEFAULT_SERVER_CONFIG_PATH,SERVER_CONFIG_PATH_ENV,CONFIG_LOAD_ERROR};
 use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 
-static SERVER_CONFIG: OnceLock<SctpServerConfig> = OnceLock::new();
+static SCTP_SERVER_CONFIG: OnceLock<SctpServerConfig> = OnceLock::new();
 
 #[derive(Debug,Serialize,Deserialize)]
 pub struct SctpServerConfig {
@@ -41,7 +41,7 @@ impl SctpServerConfig {
 
     pub fn get_config() -> &'static SctpServerConfig {
 
-        SERVER_CONFIG.get_or_init(||{
+        SCTP_SERVER_CONFIG.get_or_init(||{
             match env::var(SERVER_CONFIG_PATH_ENV){
                 Ok(config_path) => load::<SctpServerConfig,&Path>(Path::new(&config_path)).expect(&format!("{} {}", CONFIG_LOAD_ERROR, config_path.as_str())),
                 Err(_) => load::<SctpServerConfig,&Path>(Path::new(DEFAULT_SERVER_CONFIG_PATH)).expect(&format!("{} {}",CONFIG_LOAD_ERROR, DEFAULT_SERVER_CONFIG_PATH)),
