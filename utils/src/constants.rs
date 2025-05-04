@@ -42,6 +42,14 @@ pub const BROWSER_CHUNK_SIZE: usize = 32 * KILOBYTE;
 pub const TCP_SERVER_CONFIG_PATH_ENV: &str = "TCP_SERVER_CONFIG_PATH";
 pub const DEFAULT_TCP_SERVER_CONFIG_PATH: &str = "./server_config.json";
 
+
+/// //////////////////////////////////
+/// Tcp simple proxy configuration ///
+/// //////////////////////////////////
+pub const TCP_PROXY_CONFIG_PATH_ENV: &str = "TCP_PROXY_CONFIG_PATH_ENV";
+pub const DEFAULT_TCP_PROXY_CONFIG_PATH: &str = "./tcp_proxy_config.json";
+
+
 /// //////////////////////
 /// Schedulers macros ///
 /// ////////////////////

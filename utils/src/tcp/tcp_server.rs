@@ -28,6 +28,7 @@ impl TcpServer {
             let file_chunk_size = self.file_packet_size;
             
             thread_pool.execute(move || {
+                println!("Accepted connection from {}", stream.peer_addr().unwrap());
                 Self::handle_client(stream,file_chunk_size).unwrap();
             })
         }
@@ -42,7 +43,11 @@ impl TcpServer {
         'stream_loop: loop{
             
             match stream.read(&mut buffer){
-                Err(ref error ) if error.kind() == ErrorKind::ConnectionRefused => break 'stream_loop,
+                Err(ref error ) if error.kind() == ErrorKind::ConnectionReset =>{
+                    eprintln!("Connection reset by peer");
+                    break 'stream_loop
+                },
+                
                 Err(error) => return Err(error),
                 
                 Ok(0) => {
