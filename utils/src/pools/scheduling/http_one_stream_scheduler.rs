@@ -37,7 +37,7 @@ impl HttpOneStreamScheduler {
                     break;
                 }
                 
-                Ok(bytes_received) => {
+                Ok(_bytes_received) => {
 
                     // TODO better parsing
                     // Extract the first line of the request
