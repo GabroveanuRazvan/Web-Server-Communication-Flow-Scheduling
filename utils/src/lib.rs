@@ -12,6 +12,7 @@ pub mod pools{
         pub mod connection_scheduler;
         pub mod round_robin_scheduler;
         pub mod scheduling_policy;
+        pub mod http_one_stream_scheduler;
     }
     pub mod thread_pool;
     pub mod indexed_thread_pool;

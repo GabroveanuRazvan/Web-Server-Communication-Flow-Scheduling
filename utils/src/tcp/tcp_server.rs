@@ -28,7 +28,6 @@ impl TcpServer {
             let file_chunk_size = self.file_packet_size;
             
             thread_pool.execute(move || {
-                println!("Accepted connection from {}", stream.peer_addr().unwrap());
                 Self::handle_client(stream,file_chunk_size).unwrap();
             })
         }

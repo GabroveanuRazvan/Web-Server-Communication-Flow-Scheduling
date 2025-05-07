@@ -6,11 +6,11 @@ use std::path::Path;
 use crate::constants::SERVER_RECEIVE_BUFFER_SIZE;
 use libc::{IPPROTO_SCTP, SCTP_EVENTS, SCTP_INITMSG};
 use crate::config::sctp_server_config::SctpServerConfig;
-use crate::pools::scheduling::connection_scheduler;
 use crate::sctp::sctp_client::SctpStream;
 use crate::sctp::sctp_api::{safe_sctp_socket, safe_sctp_bindx, SCTP_BINDX_ADD_ADDR, SctpEventSubscribe, SctpPeerBuilder, SctpInitMsg};
 use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept, safe_getsockopt, safe_close, CStruct};
 use crate::pools::scheduling::connection_scheduler::ConnectionScheduler;
+use crate::pools::scheduling::http_one_stream_scheduler::HttpOneStreamScheduler;
 use crate::pools::scheduling::round_robin_scheduler::RoundRobinScheduler;
 use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 
@@ -114,7 +114,7 @@ impl SctpServer{
         match SctpServerConfig::scheduling_policy() {
 
             SchedulingPolicy::RoundRobin => {
-                let mut scheduler = RoundRobinScheduler::new(self.outgoing_stream_count,
+                let scheduler = RoundRobinScheduler::new(self.outgoing_stream_count,
                                                              stream,
                                                              SERVER_RECEIVE_BUFFER_SIZE,
                                                              file_packet_size);
@@ -122,14 +122,19 @@ impl SctpServer{
             },
 
             SchedulingPolicy::ShortestConnectionFirst => {
-                let mut scheduler = ConnectionScheduler::new(self.outgoing_stream_count,
+                let scheduler = ConnectionScheduler::new(self.outgoing_stream_count,
                                                              stream,
                                                              SERVER_RECEIVE_BUFFER_SIZE,
                                                              file_packet_size);
                 scheduler.start();
             },
-
-            SchedulingPolicy::Unknown(val) => panic!("Unknown scheduling policy: {val}"),
+            
+            SchedulingPolicy::HttpOneStream => {
+                let scheduler = HttpOneStreamScheduler::new(stream,SERVER_RECEIVE_BUFFER_SIZE,file_packet_size);
+                scheduler.start();
+            },
+            
+            _ => panic!("Unknown scheduling policy"),
 
         }
     }

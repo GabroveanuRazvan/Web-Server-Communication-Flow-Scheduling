@@ -2,6 +2,7 @@
 pub enum SchedulingPolicy {
     RoundRobin,
     ShortestConnectionFirst,
+    HttpOneStream,
     Unknown(u8),
 }
 
@@ -12,6 +13,7 @@ impl From<u8> for SchedulingPolicy{
         match value{
             0 => SchedulingPolicy::ShortestConnectionFirst,
             1 => SchedulingPolicy::RoundRobin,
+            2 => SchedulingPolicy::HttpOneStream,
             _ => SchedulingPolicy::Unknown(value),
         }
 
@@ -26,6 +28,7 @@ impl From<SchedulingPolicy> for u8{
         match value{
             SchedulingPolicy::ShortestConnectionFirst => 0,
             SchedulingPolicy::RoundRobin => 1,
+            SchedulingPolicy::HttpOneStream => 2,
             SchedulingPolicy::Unknown(value) => value,
         }
 
