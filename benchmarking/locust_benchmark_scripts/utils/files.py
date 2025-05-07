@@ -1,4 +1,3 @@
-from locust import HttpUser, task, constant
 import os
 import numpy as np
 
@@ -22,24 +21,3 @@ def choose_dir_file(dir : str):
 
     index = np.random.randint(num_files)
     return files[index]
-
-
-
-class WebUser(HttpUser):
-    wait_time = constant(0)
-
-    @task
-    def random_file(self):
-        file_path = choose_dir_file(choose_dir())
-        parts = file_path.split(os.sep)
-        file_path = os.sep + os.path.join(*parts[2:])
-        self.client.get(file_path)
-
-if __name__ == "__main__":
-    import os
-    path = "/a/b/c"
-    parts = path.split(os.sep)
-    new_path = os.sep + os.path.join(*parts[2:])  # păstrăm '/' în față
-    print(parts)
-
-#http://127.0.0.1:7878
