@@ -72,7 +72,7 @@ impl TcpServer {
                             String::from(".") + &path_request.trim_end_matches("?")
                         }
                     };
-
+                    
                     let file = OpenOptions::new()
                         .read(true)
                         .write(true)
@@ -100,6 +100,7 @@ impl TcpServer {
                     // Check for broken pipe error in case the browser abruptly shut down the connection
                     if let Err(error) = stream.write_all(string_response.as_bytes()){
                         if error.kind() == ErrorKind::BrokenPipe{
+                            println!("Broken pipe");
                             break 'stream_loop;
                         }
                     }
@@ -112,6 +113,7 @@ impl TcpServer {
                                 break 'stream_loop;
                             }
                         }
+                        stream.flush()?;
                     }
                     
                 }
