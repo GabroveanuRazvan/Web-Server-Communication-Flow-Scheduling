@@ -4,6 +4,9 @@ import numpy as np
 root = "./benchmark_raw_dataset"
 dirs = [os.path.join(root,current_dir) for current_dir in os.listdir(root)]
 
+# Used in one file benchmarking
+FILE_TO_FETCH_PATH = "/3.00M-6.00M/49.html"
+
 
 def choose_dir():
     num_dirs = len(dirs)

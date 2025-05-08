@@ -1,6 +1,6 @@
 from locust import User, task, events
 from urllib.parse import urlparse
-from utils.files import *
+from utils.files import FILE_TO_FETCH_PATH
 from utils.tcp import TcpHttpClient
 
 class TcpHttpUser(User):
@@ -14,20 +14,17 @@ class TcpHttpUser(User):
     @task
     def random_file_request(self):
         """
-        Chooses a random file from the root directory according to the files.py file.
+        Requests then same file continuously.
         Makes the request and sends the metadata about the request to the locust statistics runtime.
         :return:
         """
-        file_path = choose_dir_file(choose_dir())
-        parts = file_path.split(os.sep)
-        file_path = os.sep + os.path.join(*parts[2:])
 
         try:
 
-            metadata = self.client.get(file_path)
+            metadata = self.client.get(FILE_TO_FETCH_PATH)
             events.request.fire(
                 request_type="TCP",
-                name=f"GET {file_path}",
+                name=f"GET {FILE_TO_FETCH_PATH}",
                 response_time = metadata.elapsed,
                 response_length = metadata.content_length,
                 exception = None,
@@ -36,7 +33,7 @@ class TcpHttpUser(User):
         except Exception as e:
             events.request.fire(
                 request_type="TCP",
-                name=f"GET {file_path}",
+                name=f"GET {FILE_TO_FETCH_PATH}",
                 response_time=0,
                 response_length=0,
                 exception=e,
