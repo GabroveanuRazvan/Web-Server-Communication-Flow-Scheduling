@@ -72,7 +72,7 @@ impl TcpServer {
                             String::from(".") + &path_request.trim_end_matches("?")
                         }
                     };
-                    
+
                     let file = OpenOptions::new()
                         .read(true)
                         .write(true)

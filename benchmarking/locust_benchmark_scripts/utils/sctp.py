@@ -2,6 +2,8 @@ import time
 from types import SimpleNamespace
 import sctp
 import socket
+import select
+
 
 BYTE = 1
 KILOBYTE = BYTE * 1024
@@ -32,12 +34,9 @@ class SctpHttpClient:
         self.sctp_sock.sctp_send(http_header,stream=0)
 
         # Get the header message
-        while True:
-            try:
-                _, _, response_header, _ = self.sctp_sock.sctp_recv(16 * KILOBYTE)
-                break
-            except BlockingIOError as e:
-                pass
+        select.select([self.sctp_sock], [], [],None)
+        _, _, response_header, _ = self.sctp_sock.sctp_recv(16 * KILOBYTE)
+
 
         # Parse the header and get the content size
         headers = response_header.decode().split('\r\n')
@@ -49,12 +48,9 @@ class SctpHttpClient:
         # Read chunks of the file until it is received as a whole
         while True:
 
-            while True:
-                try:
-                    _, _, data, _ = self.sctp_sock.sctp_recv(16 * KILOBYTE)
-                    break
-                except BlockingIOError as e:
-                    pass
+            select.select([self.sctp_sock], [], [], None)
+            _, _, data, _ = self.sctp_sock.sctp_recv(16 * KILOBYTE)
+
 
             data_size = len(data)
             if data_size == 0:
