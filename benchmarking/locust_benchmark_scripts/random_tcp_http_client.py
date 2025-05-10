@@ -18,7 +18,7 @@ class TcpHttpUser(User):
         Makes the request and sends the metadata about the request to the locust statistics runtime.
         :return:
         """
-        file_path = choose_dir_file(choose_dir())
+        file_path = choose_file()
         parts = file_path.split(os.sep)
         file_path = os.sep + os.path.join(*parts[2:])
 

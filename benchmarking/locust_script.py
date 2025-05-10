@@ -12,13 +12,13 @@ def add_throughput_history(df: pd.DataFrame) -> pd.DataFrame:
     df["Throughput/s"] = (df["Requests/s"] * df["Total Average Content Size"]).round(6)
     return df
 
-RUN_TITLE = "OneStreamSctp2"
+RUN_TITLE = "SctpOneStreamFair10k"
 NUM_RUNS = 1
-LOCUST_FILE_PATH = "locust_benchmark_scripts/random_sctp_http_client.py"
+LOCUST_FILE_PATH = "locust_benchmark_scripts/fair_random_sctp_client.py"
 NUM_USERS = 1
 SPAWN_RATE = NUM_USERS
 HOST = "http://192.168.50.30:7878"
-RUN_TIME = "15m"
+RUN_TIME = "20m"
 RESULTS_ROOT = "./results_headless"
 RUN_ROOT = os.path.join(RESULTS_ROOT, RUN_TITLE)
 RESULT_DIR_NAME = f"{RUN_TITLE}{{}}_U{{}}_T{{}}"
