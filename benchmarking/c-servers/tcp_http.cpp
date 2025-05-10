@@ -122,7 +122,7 @@ bool send_file(int client_fd, const std::string& file_path){
     }
 
 
-
+    close(fd);
     munmap(mmap_file, file_size);
     return true;
 

@@ -104,27 +104,6 @@ bool send_file(int client_fd, const std::string& file_path){
         return false;
     }
 
-//    std::cout<<"Sent!";
-//    size_t bytes_sent = sctp_sendmsg(client_fd,
-//                                     mmap_file,
-//                                     file_size,
-//                                     nullptr,
-//                                     0,
-//                                     0,
-//                                     0,
-//                                     0,
-//                                     0,
-//                                     0);
-//    if(bytes_sent < 0){
-//        std::cerr << "Send: " << std::strerror(errno) << std::endl;
-//        munmap(mmap_file,file_size);
-//        close(client_fd);
-//        close(fd);
-//        return false;
-//    }
-//
-//    std::cout<<"Sent!";
-
     size_t current_sent = 0;
 
     while(current_sent < file_size){
@@ -154,7 +133,7 @@ bool send_file(int client_fd, const std::string& file_path){
     }
 
 
-
+    close(fd);
     munmap(mmap_file, file_size);
     return true;
 
