@@ -12,9 +12,9 @@ def add_throughput_history(df: pd.DataFrame) -> pd.DataFrame:
     df["Throughput/s"] = (df["Requests/s"] * df["Total Average Content Size"]).round(6)
     return df
 
-RUN_TITLE = "TcpOneStreamC++"
+RUN_TITLE = "Test"
 NUM_RUNS = 1
-LOCUST_FILE_PATH = "locust_benchmark_scripts/fair_random_tcp_client.py"
+LOCUST_FILE_PATH = "locust_benchmark_scripts/compute_stats.py"
 NUM_USERS = 1
 SPAWN_RATE = NUM_USERS
 HOST = "http://192.168.50.30:7878"

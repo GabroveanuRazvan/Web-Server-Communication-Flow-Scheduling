@@ -1,0 +1,117 @@
+use std::net::{SocketAddrV4};
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+use serde::{Deserialize, Serialize};
+use utils::config::serialization::{load, save};
+use utils::constants::KILOBYTE;
+use utils::sctp::sctp_api::SctpPeerBuilder;
+use utils::sctp::sctp_client::{SctpStreamBuilder};
+
+const REQUESTS_PATH: &str = "./requests_list_10000.json";
+const EVENTS_PATH: &str = "./events_list_10000.json";
+
+const PEER_ADDRESS: &str = "192.168.50.30:7878";
+
+
+fn main() {
+
+    let mut buffer = [0u8;64 * KILOBYTE];
+
+    let requests: Vec<PathBuf> = load(REQUESTS_PATH).unwrap();
+    let num_requests = requests.len();
+    let mut events = vec![LocustEvent::default(); num_requests];
+
+    let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
+    let mut sctp_client = SctpStreamBuilder::new()
+        .socket()
+        .address(socket_address.ip().clone())
+        .port(socket_address.port())
+        .set_incoming_streams(10)
+        .set_outgoing_streams(10)
+        .ttl(0)
+        .build();
+
+    sctp_client.connect();
+
+    for (idx,request) in requests.iter().enumerate() {
+
+        let http_header = HttpGetHeader(request);
+        let start = Instant::now();
+
+        // Send the reqauest
+        sctp_client.write_all(http_header.as_bytes(),0,0,0).unwrap();
+
+        // Get the response
+        sctp_client.read(&mut buffer,None,None).unwrap();
+
+        let file_size = extract_content_length(&buffer).unwrap();
+        let mut current_size = 0;
+
+        while current_size < file_size {
+
+            let bytes_received = sctp_client.read(&mut buffer,None,None).unwrap();
+            current_size += bytes_received;
+
+        }
+
+        let end = start.elapsed().as_secs_f64();
+        events[idx] = LocustEvent::new(String::from("SCTP"),format!("GET {}",request.display()),end,file_size);
+        
+    }
+
+    save(events,EVENTS_PATH).unwrap();
+
+}
+
+#[derive(Debug,Clone,Serialize,Deserialize)]
+struct LocustEvent{
+
+    request_type: String,
+    name: String,
+    response_time: f64,
+    response_length: usize,
+
+}
+
+impl Default for LocustEvent{
+    fn default() -> Self{
+        Self{
+            request_type: String::new(),
+            name: String::new(),
+            response_time: 0.0,
+            response_length: 0,
+        }
+    }
+}
+
+impl LocustEvent{
+    pub fn new(request_type: String, name: String, response_time: f64, response_length: usize) -> Self{
+        Self{
+            request_type,
+            name,
+            response_time,
+            response_length,
+        }
+    }
+}
+
+
+pub fn HttpGetHeader(file_path: impl AsRef<Path>) -> String{
+    format!("GET {} HTTP/1.1\r\nHost: rust",file_path.as_ref().to_str().unwrap())
+}
+
+pub fn extract_content_length(buffer: &[u8]) -> Option<usize>{
+
+    let text = String::from_utf8_lossy(buffer);
+
+    for line in text.lines(){
+
+        if let Some(rest) = line.strip_prefix("Content-Length: ") {
+            return rest.trim().parse::<usize>().ok();
+        }
+
+    }
+
+    None
+
+}
