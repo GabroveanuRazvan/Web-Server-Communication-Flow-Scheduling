@@ -28,20 +28,20 @@ def walk_dir(root: str):
 NUM_REQUESTS = 5000
 REQUESTS_LIST_PATH = f"./requests_list_{NUM_REQUESTS}.pkl"
 
+DIRS = [path.removeprefix(ROOT) for path in walk_dir(ROOT)]
+
+def choose_file():
+    num_dirs = len(DIRS)
+    if num_dirs == 0:
+        raise Exception("No benchmark dataset")
+
+    index = np.random.randint(num_dirs)
+    return DIRS[index]
+
 def get_requests() -> list[str]:
 
     if os.path.exists(REQUESTS_LIST_PATH):
         return pkl.load(open(REQUESTS_LIST_PATH, "rb"))
-
-    DIRS = [path.removeprefix(ROOT) for path in walk_dir(ROOT)]
-
-    def choose_file():
-        num_dirs = len(DIRS)
-        if num_dirs == 0:
-            raise Exception("No benchmark dataset")
-
-        index = np.random.randint(num_dirs)
-        return DIRS[index]
 
     requests = [choose_file() for _ in range(NUM_REQUESTS)]
     pkl.dump(requests, open(REQUESTS_LIST_PATH, "wb"))

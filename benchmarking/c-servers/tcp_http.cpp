@@ -104,6 +104,7 @@ bool send_file(int client_fd, const std::string& file_path){
     }
 
 
+
     size_t current_sent = 0;
 
     while(current_sent < file_size){
@@ -180,7 +181,7 @@ int main(){
 
         while(true){
             auto request = recv_response_header(client_fd);
-
+            std::cout<<request;
             if(request.empty())
                 break;
 

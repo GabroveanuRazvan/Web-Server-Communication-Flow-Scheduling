@@ -33,34 +33,62 @@ fn main() {
 
     sctp_client.connect();
 
-    for (idx,request) in requests.iter().enumerate() {
 
+
+    let mut total_time = 0f64;
+    let mut total_size = 0usize;
+
+    for (idx,request) in requests.iter().enumerate() {
         let http_header = HttpGetHeader(request);
+
         let start = Instant::now();
 
-        // Send the reqauest
-        sctp_client.write_all(http_header.as_bytes(),0,0,0).unwrap();
+        // Send the request
+        sctp_client.write_all(http_header.as_bytes(), 0, 0, 0).unwrap();
 
         // Get the response
-        sctp_client.read(&mut buffer,None,None).unwrap();
+        sctp_client.read(&mut buffer, None, None).unwrap();
 
-        let file_size = extract_content_length(&buffer).unwrap();
+        let file_size = extract_content_length(&buffer).expect("Failed to extract content");
         let mut current_size = 0;
 
         while current_size < file_size {
-
-            let bytes_received = sctp_client.read(&mut buffer,None,None).unwrap();
+            let bytes_received = sctp_client.read(&mut buffer, None, None).unwrap();
             current_size += bytes_received;
-
         }
 
         let end = start.elapsed().as_secs_f64();
-        events[idx] = LocustEvent::new(String::from("SCTP"),format!("GET {}",request.display()),end,file_size);
-        
+
+        total_time += end;
+        total_size +=  file_size;
+
+        events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
+        println!("{idx}");
     }
 
-    save(events,EVENTS_PATH).unwrap();
+    let throughput = total_size as f64 / total_time;
 
+    let data = LocustData::new(events, total_time,throughput);
+    save(data,EVENTS_PATH).unwrap();
+
+}
+
+#[derive(Debug,Clone,Serialize,Deserialize)]
+struct LocustData{
+    total_time: f64,
+    throughput: f64,
+    events: Vec<LocustEvent>,
+    
+}
+
+impl LocustData{
+    fn new(events: Vec<LocustEvent>, total_time: f64,throughput: f64)->Self{
+        Self{
+            total_time,
+            throughput,
+            events,
+        }
+    }
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
@@ -97,7 +125,7 @@ impl LocustEvent{
 
 
 pub fn HttpGetHeader(file_path: impl AsRef<Path>) -> String{
-    format!("GET {} HTTP/1.1\r\nHost: rust",file_path.as_ref().to_str().unwrap())
+    format!("GET {} HTTP/1.1\r\nHost: rust",file_path.as_ref().to_str().expect("Http Header"))
 }
 
 pub fn extract_content_length(buffer: &[u8]) -> Option<usize>{
