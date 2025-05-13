@@ -1,11 +1,11 @@
 use std::ffi::CString;
 use std::fmt::{Debug};
 use std::io::Error;
-use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink, sctp_initmsg, sockaddr_storage, sctp_sndrcvinfo};
+use libc::{__errno_location, recv, c_int, listen, c_char, c_void, sockaddr_in, AF_INET, setsockopt, accept, sockaddr, socklen_t, in_addr, size_t, getsockopt, close, dup, mode_t, shm_open, shm_unlink, sctp_initmsg, sockaddr_storage, sctp_sndrcvinfo, SOL_SOCKET, SO_SNDBUF, SO_RCVBUF};
 use std::io::Result;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 use std::{mem, ptr, slice};
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
 
 /// Common trait for all imported C structs
 pub trait CStruct{
@@ -378,5 +378,46 @@ impl ModeBuilder {
 
     pub fn build(self) -> libc::mode_t {
         self.mode
+    }
+}
+
+
+/// Trait used for sockets to change the send/receive kernel buffer sizes.
+pub trait SocketBuffers{
+    fn set_send_buffer_size(&self,buffer_size: usize) -> Result<i32>;
+    fn set_receive_buffer_size(&self,buffer_size: usize) -> Result<i32>;
+
+    fn get_send_buffer_size(&self) -> Result<usize>;
+    fn get_receive_buffer_size(&self) -> Result<usize>;
+}
+
+
+impl SocketBuffers for TcpStream{
+    fn set_send_buffer_size(&self,buffer_size: usize) -> Result<i32>{
+        let fd = self.as_raw_fd();
+        safe_setsockopt(fd,SOL_SOCKET,SO_SNDBUF,&buffer_size.to_le_bytes())
+    }
+
+    fn set_receive_buffer_size(&self,buffer_size: usize) -> Result<i32>{
+        let fd = self.as_raw_fd();
+        safe_setsockopt(fd,SOL_SOCKET,SO_RCVBUF,&buffer_size.to_le_bytes())
+    }
+
+    fn get_send_buffer_size(&self) -> Result<usize>{
+        let fd = self.as_raw_fd();
+        let mut num_bytes = [0u8;8];
+
+       safe_getsockopt(fd,SOL_SOCKET,SO_SNDBUF,&mut num_bytes).map(|_|{
+           usize::from_le_bytes(num_bytes)
+       })
+    }
+
+    fn get_receive_buffer_size(&self) -> Result<usize>{
+        let fd = self.as_raw_fd();
+        let mut num_bytes = [0u8;8];
+
+        safe_getsockopt(fd,SOL_SOCKET,SO_RCVBUF,&mut num_bytes).map(|_|{
+            usize::from_le_bytes(num_bytes)
+        })
     }
 }

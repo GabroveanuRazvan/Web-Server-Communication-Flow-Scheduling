@@ -5,11 +5,14 @@ use std::thread;
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use utils::config::serialization::{load, save};
-use utils::constants::KILOBYTE;
+use utils::constants::{KILOBYTE, MEGABYTE};
+use utils::libc_wrappers::SocketBuffers;
 
 const REQUESTS_PATH: &str = "./requests_list_10000.json";
 const EVENTS_PATH: &str = "./events_list_10000.json";
-const PEER_ADDRESS: &str = "192.168.50.251:7878";
+const PEER_ADDRESS: &str = "192.168.50.30:7878";
+
+const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
 
 
 fn main() {
@@ -18,10 +21,16 @@ fn main() {
     let num_requests = requests.len();
     let mut events = vec![LocustEvent::default(); num_requests];
     let mut tcp_client = TcpStream::connect(PEER_ADDRESS).unwrap();
-
+    
+    tcp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
+    
+    println!("Receive buffer size: {}",tcp_client.get_receive_buffer_size().unwrap());
+    
     let mut total_time = 0f64;
     let mut total_size = 0usize;
-
+    
+    thread::sleep(Duration::from_secs(5));
+    
     for (idx,request) in requests.iter().enumerate() {
 
         let http_header = HttpGetHeader(request);
@@ -49,7 +58,7 @@ fn main() {
         total_time += end;
         total_size +=  file_size;
 
-        events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
+        events[idx] = LocustEvent::new(String::from("TCP"), format!("GET {}", request.display()), end, file_size);
         println!("{idx}");
     }
 

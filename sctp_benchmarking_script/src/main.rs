@@ -1,16 +1,19 @@
 use std::net::{SocketAddrV4};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::thread;
+use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use utils::config::serialization::{load, save};
-use utils::constants::KILOBYTE;
+use utils::constants::{KILOBYTE, MEGABYTE};
+use utils::libc_wrappers::SocketBuffers;
 use utils::sctp::sctp_api::SctpPeerBuilder;
 use utils::sctp::sctp_client::{SctpStreamBuilder};
 
 const REQUESTS_PATH: &str = "./requests_list_10000.json";
 const EVENTS_PATH: &str = "./events_list_10000.json";
 
-const PEER_ADDRESS: &str = "192.168.50.251:7878";
+const PEER_ADDRESS: &str = "192.168.50.30:7878";
+const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
 
 
 fn main() {
@@ -21,7 +24,7 @@ fn main() {
     let mut events = vec![LocustEvent::default(); num_requests];
 
     let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
-    
+
     // Create the sctp client and connect
     let mut sctp_client = SctpStreamBuilder::new()
         .socket()
@@ -35,6 +38,11 @@ fn main() {
     sctp_client.connect();
 
 
+    sctp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
+
+    println!("Receive buffer size: {}",sctp_client.get_receive_buffer_size().unwrap());
+
+    thread::sleep(Duration::from_secs(5));
 
     let mut total_time = 0f64;
     let mut total_size = 0usize;
@@ -59,7 +67,7 @@ fn main() {
         }
 
         let end = start.elapsed().as_secs_f64();
-        
+
         // Store the request data
         total_time += end;
         total_size +=  file_size;
@@ -67,7 +75,7 @@ fn main() {
         events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
         println!("{idx}");
     }
-    
+
     // Compute the throughput and store the data as json files
     let throughput = total_size as f64 / total_time;
 
@@ -146,3 +154,6 @@ pub fn extract_content_length(buffer: &[u8]) -> Option<usize>{
     None
 
 }
+
+//sudo sysctl -w net.core.rmem_max=1048576
+//sudo sysctl -w net.core.wmem_max=1048576

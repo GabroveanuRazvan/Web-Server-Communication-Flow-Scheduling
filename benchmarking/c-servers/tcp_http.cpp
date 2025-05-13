@@ -208,6 +208,8 @@ int main(){
             continue;
         }
 
+        std::cout << "Size of kernel send buffer: "<< actual_size << std::endl;
+
         while(true){
             auto request = recv_response_header(client_fd);
 

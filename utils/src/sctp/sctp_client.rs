@@ -1,10 +1,10 @@
 use std::io;
-use std::net::{Ipv4Addr, SocketAddrV4};
-use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS};
-use crate::libc_wrappers::{safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, CStruct, SockAddrIn};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
+use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS, SOL_SOCKET, SO_RCVBUF, SO_SNDBUF};
+use crate::libc_wrappers::{safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, CStruct, SockAddrIn, SocketBuffers};
 use crate::sctp::sctp_api::{safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpSenderReceiveInfo, SctpStatus};
 use io::Result;
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
 
 #[derive(Debug)]
 pub struct SctpStream{
@@ -178,6 +178,42 @@ impl SctpStream{
 
     }
 
+}
+
+impl AsRawFd for SctpStream{
+    fn as_raw_fd(&self) -> RawFd{
+        self.sock_fd
+    }
+}
+
+impl SocketBuffers for SctpStream{
+    fn set_send_buffer_size(&self,buffer_size: usize) -> Result<i32>{
+        let fd = self.as_raw_fd();
+        safe_setsockopt(fd,SOL_SOCKET,SO_SNDBUF,&buffer_size.to_le_bytes())
+    }
+
+    fn set_receive_buffer_size(&self,buffer_size: usize) -> Result<i32>{
+        let fd = self.as_raw_fd();
+        safe_setsockopt(fd,SOL_SOCKET,SO_RCVBUF,&buffer_size.to_le_bytes())
+    }
+
+    fn get_send_buffer_size(&self) -> Result<usize>{
+        let fd = self.as_raw_fd();
+        let mut num_bytes = [0u8;8];
+
+        safe_getsockopt(fd,SOL_SOCKET,SO_SNDBUF,&mut num_bytes).map(|_|{
+            usize::from_le_bytes(num_bytes)
+        })
+    }
+
+    fn get_receive_buffer_size(&self) -> Result<usize>{
+        let fd = self.as_raw_fd();
+        let mut num_bytes = [0u8;8];
+
+        safe_getsockopt(fd,SOL_SOCKET,SO_RCVBUF,&mut num_bytes).map(|_|{
+            usize::from_le_bytes(num_bytes)
+        })
+    }
 }
 
 /// Used to gracefully close the socket descriptor when the client goes out of scope
