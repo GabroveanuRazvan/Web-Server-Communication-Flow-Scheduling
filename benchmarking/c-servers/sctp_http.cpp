@@ -15,8 +15,8 @@
 const uint16_t PORT = 7878;
 const int KILOBYTE = 1024;
 const char* SERVER_ROOT = "../benchmark_raw_dataset";
-const int SOCKET_PROTOCOL = IPPROTO_SCTP;
 const size_t CHUNK_SIZE = 16 * KILOBYTE;
+const size_t SENDER_BUFFER_SIZE = 1024 * KILOBYTE;
 
 
 std::string recv_response_header(int client_fd) {
@@ -27,13 +27,13 @@ std::string recv_response_header(int client_fd) {
     struct sctp_sndrcvinfo recv_info = {0};
     int bytes_received = sctp_recvmsg(client_fd, header, sizeof(header), nullptr, nullptr,&recv_info, nullptr);
 
-
+    // Return an empty buffer if the connection closed or an error occurred
     if(bytes_received == 0)
-        return buffer;
+        return std::move(buffer);
 
     if (bytes_received < 0) {
         std::cerr << "Recv: " << std::strerror(errno) << std::endl;
-        return buffer;
+        return std::move(buffer);
     }
 
     buffer.append(header, bytes_received);
@@ -42,6 +42,7 @@ std::string recv_response_header(int client_fd) {
 
 }
 
+// Extract the http path from a request and prepare it
 std::string extract_http_path(const std::string& request) {
     std::istringstream request_stream(request);
     std::string method, path, version;
@@ -55,6 +56,7 @@ std::string extract_http_path(const std::string& request) {
 
 }
 
+// Simple http header
 std::string make_http_response_header(size_t size) {
     std::ostringstream response;
 
@@ -69,6 +71,7 @@ std::string make_http_response_header(size_t size) {
 
 bool send_file(int client_fd, const std::string& file_path){
 
+    // Open the file
     int fd = open(file_path.c_str(), O_RDONLY);
     if (fd < 0){
         std::cerr << "Open: " << std::strerror(errno) << std::endl;
@@ -77,6 +80,7 @@ bool send_file(int client_fd, const std::string& file_path){
         return false;
     }
 
+    // Get the file size
     struct stat file_status;
     if(fstat(fd,&file_status) < 0){
         std::cerr << "Fstat: " << std::strerror(errno) << std::endl;
@@ -86,6 +90,8 @@ bool send_file(int client_fd, const std::string& file_path){
     }
 
     size_t file_size = file_status.st_size;
+
+    // Map the file into memory
     char* mmap_file = (char *)mmap(nullptr,file_size,PROT_READ,MAP_PRIVATE,fd,0);
     if(mmap_file == nullptr){
         std::cerr << "Mmap: " << std::strerror(errno) << std::endl;
@@ -94,6 +100,7 @@ bool send_file(int client_fd, const std::string& file_path){
         return false;
     }
 
+    // Prepare a response header and send it
     auto response_header = make_http_response_header(file_size);
 
     if(sctp_sendmsg(client_fd,response_header.c_str(),response_header.size(), nullptr, 0,0,0,0,0,0) < 0){
@@ -104,8 +111,8 @@ bool send_file(int client_fd, const std::string& file_path){
         return false;
     }
 
+    // Send the file in chunks until it is processed
     size_t current_sent = 0;
-
     while(current_sent < file_size){
 
         size_t bytes_to_send = std::min(CHUNK_SIZE,file_size-current_sent);
@@ -142,13 +149,14 @@ bool send_file(int client_fd, const std::string& file_path){
 
 int main(){
 
+    // Change the working dir to the server root
     if (chdir(SERVER_ROOT) != 0) {
         std::cerr << "Chdir: " << strerror(errno) << std::endl;
         exit(EXIT_FAILURE);
     }
 
-
-    int sock_fd = socket(AF_INET,SOCK_STREAM,SOCKET_PROTOCOL);
+    // Create the sctp socket
+    int sock_fd = socket(AF_INET,SOCK_STREAM,IPPROTO_SCTP);
     if(sock_fd < 0){
         std::cerr << "Socket: " << std::strerror(errno) << std::endl;
         exit(EXIT_FAILURE);
@@ -159,15 +167,22 @@ int main(){
     server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
+    // Reuse the address when needed
     int opt = 1;
-    setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    if(setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0){
+        std::cerr << "setsockopt: " << std::strerror(errno) << std::endl;
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
 
+    // Bind the server to its address
     if(bind(sock_fd, (sockaddr* ) &server_addr,sizeof(server_addr)) < 0){
         std::cerr << "Bind: " << std::strerror(errno) << std::endl;
         close(sock_fd);
         exit(EXIT_FAILURE);
     }
 
+    // Set the socket to listening mode
     if(listen(sock_fd,1)  < 0){
         std::cerr << "Listen: " << std::strerror(errno) << std::endl;
         close(sock_fd);
@@ -179,15 +194,34 @@ int main(){
         sockaddr_in client_addr = {0};
         socklen_t client_addr_size = sizeof(client_addr);
 
+        // Accept a new client
         int client_fd = accept(sock_fd,(sockaddr*) &client_addr,&client_addr_size);
 
         if(client_fd < 0){
             std::cerr << "Accept: " << std::strerror(errno) << std::endl;
-            close(sock_fd);
-            exit(EXIT_FAILURE);
+            continue;
+        }
+
+        // Set the client receive buffer to provided size
+        if(setsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &SENDER_BUFFER_SIZE, sizeof(SENDER_BUFFER_SIZE)) < 0){
+            std::cerr << "setsockopt client: " << std::strerror(errno) << std::endl;
+            close(client_fd);
+            continue;
         }
 
         std::cout<<"New connection"<< std::endl;
+
+        int actual_size = 0;
+        unsigned int len = sizeof(actual_size);
+
+        // Get the actual size of the kernel receive buffer
+        if(getsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &actual_size, &len) < 0){
+            std::cerr << "getsockopt client: " << std::strerror(errno) << std::endl;
+            close(client_fd);
+            continue;
+        }
+
+        std::cout << "Size of kernel send buffer: "<< actual_size << std::endl;
 
         while(true){
             auto request = recv_response_header(client_fd);

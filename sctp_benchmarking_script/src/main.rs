@@ -10,18 +10,19 @@ use utils::sctp::sctp_client::{SctpStreamBuilder};
 const REQUESTS_PATH: &str = "./requests_list_10000.json";
 const EVENTS_PATH: &str = "./events_list_10000.json";
 
-const PEER_ADDRESS: &str = "192.168.50.30:7878";
+const PEER_ADDRESS: &str = "192.168.50.251:7878";
 
 
 fn main() {
 
     let mut buffer = [0u8;64 * KILOBYTE];
-
     let requests: Vec<PathBuf> = load(REQUESTS_PATH).unwrap();
     let num_requests = requests.len();
     let mut events = vec![LocustEvent::default(); num_requests];
 
     let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
+    
+    // Create the sctp client and connect
     let mut sctp_client = SctpStreamBuilder::new()
         .socket()
         .address(socket_address.ip().clone())
@@ -58,14 +59,16 @@ fn main() {
         }
 
         let end = start.elapsed().as_secs_f64();
-
+        
+        // Store the request data
         total_time += end;
         total_size +=  file_size;
 
         events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
         println!("{idx}");
     }
-
+    
+    // Compute the throughput and store the data as json files
     let throughput = total_size as f64 / total_time;
 
     let data = LocustData::new(events, total_time,throughput);

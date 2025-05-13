@@ -9,7 +9,7 @@ use utils::constants::KILOBYTE;
 
 const REQUESTS_PATH: &str = "./requests_list_10000.json";
 const EVENTS_PATH: &str = "./events_list_10000.json";
-const PEER_ADDRESS: &str = "192.168.50.30:7878";
+const PEER_ADDRESS: &str = "192.168.50.251:7878";
 
 
 fn main() {
