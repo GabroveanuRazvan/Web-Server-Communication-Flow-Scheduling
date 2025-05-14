@@ -77,7 +77,7 @@ fn main() {
     }
 
     // Compute the throughput and store the data as json files
-    let throughput = total_size as f64 / total_time;
+        let throughput = total_size as f64 / total_time;
 
     let data = LocustData::new(events, total_time,throughput);
     save(data,EVENTS_PATH).unwrap();
@@ -136,7 +136,7 @@ impl LocustEvent{
 
 
 pub fn HttpGetHeader(file_path: impl AsRef<Path>) -> String{
-    format!("GET {} HTTP/1.1\r\nHost: rust",file_path.as_ref().to_str().expect("Http Header"))
+    format!("GET {} HTTP/1.1\r\nHost: rust\r\n\r\n",file_path.as_ref().to_str().expect("Http Header"))
 }
 
 pub fn extract_content_length(buffer: &[u8]) -> Option<usize>{
