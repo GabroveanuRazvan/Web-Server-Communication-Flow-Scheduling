@@ -14,11 +14,11 @@ def add_throughput_history(df: pd.DataFrame) -> pd.DataFrame:
 
 RUN_TITLE = "Test"
 NUM_RUNS = 1
-LOCUST_FILE_PATH = "locust_benchmark_scripts/compute_stats.py"
-NUM_USERS = 1
+LOCUST_FILE_PATH = "locust_benchmark_scripts/fair_tcp_multiuser.py"
+NUM_USERS = 6
 SPAWN_RATE = NUM_USERS
-HOST = "http://192.168.50.30:7878"
-RUN_TIME = "20m"
+HOST = "http://192.168.50.251:7878"
+RUN_TIME = "5m"
 RESULTS_ROOT = "./results_headless"
 RUN_ROOT = os.path.join(RESULTS_ROOT, RUN_TITLE)
 RESULT_DIR_NAME = f"{RUN_TITLE}{{}}_U{{}}_T{{}}"

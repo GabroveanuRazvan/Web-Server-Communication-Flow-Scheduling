@@ -14,7 +14,7 @@
 
 const uint16_t PORT = 7878;
 const int KILOBYTE = 1024;
-const char* SERVER_ROOT = "../benchmark_raw_dataset";
+const char* SERVER_ROOT = "./benchmark_raw_dataset";
 const size_t CHUNK_SIZE = 16 * KILOBYTE;
 const size_t SENDER_BUFFER_SIZE = 1024 * KILOBYTE;
 
