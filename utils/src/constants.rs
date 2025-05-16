@@ -57,3 +57,12 @@ pub const DEFAULT_TCP_PROXY_CONFIG_PATH: &str = "./tcp_proxy_config.json";
 
 pub const METADATA_STATIC_SIZE: usize = 8 * BYTE;
 pub const CHUNK_METADATA_SIZE: usize = 0 * BYTE;
+
+
+/// //////////////////////////
+/// TCP Association config ///
+/// //////////////////////////
+
+pub const MAX_MESSAGE_SIZE: usize = 128 * KILOBYTE;
+
+pub const TCP_ASSOC_META_SIZE: usize = (8 + 2) * BYTE;

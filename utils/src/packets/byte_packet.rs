@@ -228,7 +228,7 @@ impl BytePacket{
 
     }
 
-    /// Returns the written packet buffer until the position.
+    /// Returns the written packet buffer to the current position.
     pub fn get_buffer(&self) -> &[u8]{
         self.buffer[0..self.position].as_ref()
     }

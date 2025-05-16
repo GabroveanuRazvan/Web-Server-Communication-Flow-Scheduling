@@ -42,6 +42,7 @@ pub mod tcp{
     pub mod tcp_child_proxy;
     pub mod tcp_server;
     pub mod tcp_simple_proxy;
+    pub mod tcp_association;
 }
 
 pub mod libc_wrappers;
