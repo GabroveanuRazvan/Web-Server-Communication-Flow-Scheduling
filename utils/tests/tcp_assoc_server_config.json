@@ -1,0 +1,8 @@
+{
+  "address": "127.0.0.1",
+  "port": 7878,
+  "root": "./web_files",
+  "stream_count": 12,
+  "scheduling_policy": 1,
+  "file_packet_size": 65536
+}

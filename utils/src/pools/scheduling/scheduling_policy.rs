@@ -48,15 +48,15 @@ mod tests{
         assert_eq!(SchedulingPolicy::ShortestConnectionFirst, code);
         let code = SchedulingPolicy::from(1);
         assert_eq!(SchedulingPolicy::RoundRobin, code);
-        let code = SchedulingPolicy::from(2);
-        assert_eq!(SchedulingPolicy::Unknown(2),code);
+        let code = SchedulingPolicy::from(5);
+        assert_eq!(SchedulingPolicy::Unknown(5),code);
 
         let code = 0;
         assert_eq!(SchedulingPolicy::ShortestConnectionFirst,code.into());
         let code = 1;
         assert_eq!(SchedulingPolicy::RoundRobin,code.into());
-        let code = 2;
-        assert_eq!(SchedulingPolicy::Unknown(2),code.into());
+        let code = 5;
+        assert_eq!(SchedulingPolicy::Unknown(5),code.into());
 
     }
 }

@@ -79,7 +79,7 @@ impl TcpAssociation{
     /// Sends a message through a stream.
     /// The message will have a ppid attached to its payload.
     /// The stream number will be sent through the command stream.
-    pub fn send(&mut self,message: &[u8], stream: usize, ppid: u16) -> Result<()>{
+    pub fn send(&mut self,message: &[u8], stream: usize, ppid: u32) -> Result<()>{
 
         // Check for errors
         let message_size = message.len();
@@ -96,7 +96,7 @@ impl TcpAssociation{
         
         let mut byte_packet = BytePacket::new(packet_size);
 
-        byte_packet.write_u16(ppid).map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
+        byte_packet.write_u32(ppid).map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
         byte_packet.write_u64(message_size as u64).map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
         unsafe{
             byte_packet.write_buffer(message).map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
@@ -126,7 +126,7 @@ impl TcpAssociation{
 
         // Parse the metadata packet
         let mut packet = BytePacket::from(&meta_buffer);
-        let ppid = packet.read_u16().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
+        let ppid = packet.read_u32().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
         let message_size = packet.read_u64().map_err(|err| Error::new(ErrorKind::Other, err.to_string()))?;
         
         // Receive the message
@@ -136,6 +136,13 @@ impl TcpAssociation{
         Ok(AssocMessage::new(message,stream_buf[0],ppid))
 
     }
+    
+    pub fn peer_addresses(&self) -> Vec<SocketAddr>{
+        let mut addresses : Vec<SocketAddr> = self.streams.iter().map(|stream| stream.peer_addr().unwrap()).collect();
+        addresses.push(self.control_stream.peer_addr().unwrap());
+        addresses
+        
+    }
 
 }
 
@@ -143,12 +150,12 @@ impl TcpAssociation{
 pub struct AssocMessage{
     pub message: Vec<u8>,
     pub stream: u8,
-    pub ppid: u16,
+    pub ppid: u32,
 }
 
 impl AssocMessage{
     /// Create a new tcp association message.
-    fn new(message: Vec<u8>, stream: u8, ppid: u16) -> Self{
+    fn new(message: Vec<u8>, stream: u8, ppid: u32) -> Self{
         Self{
             message,
             stream,
@@ -214,9 +221,17 @@ impl TcpAssociationListener{
     pub fn stream_count(&self) -> u8{
         self.stream_count
     }
+    
+    pub fn local_addr(&self) -> Result<SocketAddr>{
+        self.listener.local_addr()
+    }
+    
+    pub fn incoming(&self) -> Incoming{
+        Incoming::new(self)
+    }
 }
 
-struct Incoming<'a>{
+pub struct Incoming<'a>{
     assoc_listener: &'a TcpAssociationListener,
 }
 

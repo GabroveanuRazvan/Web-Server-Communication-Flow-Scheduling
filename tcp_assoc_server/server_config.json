@@ -1,0 +1,8 @@
+{
+  "address": "127.0.0.1",
+  "port": 7878,
+  "root": "../benchmarking/benchmark_raw_dataset",
+  "stream_count": 12,
+  "scheduling_policy": 0,
+  "file_packet_size": 65536
+}

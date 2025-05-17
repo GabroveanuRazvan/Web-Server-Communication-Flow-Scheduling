@@ -65,4 +65,4 @@ pub const CHUNK_METADATA_SIZE: usize = 0 * BYTE;
 
 pub const MAX_MESSAGE_SIZE: usize = 128 * KILOBYTE;
 
-pub const TCP_ASSOC_META_SIZE: usize = (8 + 2) * BYTE;
+pub const TCP_ASSOC_META_SIZE: usize = (8 + 4) * BYTE;

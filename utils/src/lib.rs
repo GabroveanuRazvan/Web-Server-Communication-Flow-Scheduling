@@ -10,6 +10,7 @@ pub mod pools{
     pub mod scheduling{
         pub mod shortest_job_first_pool;
         pub mod connection_scheduler;
+        pub mod tcp_connection_scheduler;
         pub mod round_robin_scheduler;
         pub mod scheduling_policy;
         pub mod http_one_stream_scheduler;
@@ -36,6 +37,7 @@ pub mod config{
     pub mod sctp_proxy_config;
     pub mod tcp_server_config;
     pub mod tcp_proxy_config;
+    pub mod tcp_assoc_server_config;
 }
 
 pub mod tcp{
@@ -43,6 +45,7 @@ pub mod tcp{
     pub mod tcp_server;
     pub mod tcp_simple_proxy;
     pub mod tcp_association;
+    pub mod tcp_assoc_server;
 }
 
 pub mod libc_wrappers;
