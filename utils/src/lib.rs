@@ -11,6 +11,7 @@ pub mod pools{
         pub mod shortest_job_first_pool;
         pub mod connection_scheduler;
         pub mod tcp_connection_scheduler;
+        pub mod tcp_round_robin_scheduler;
         pub mod round_robin_scheduler;
         pub mod scheduling_policy;
         pub mod http_one_stream_scheduler;

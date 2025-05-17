@@ -1,10 +1,11 @@
 use std::net::{SocketAddr, ToSocketAddrs,TcpStream,TcpListener};
 use std::io::{Error, ErrorKind, Read, Result, Write};
+use std::num::NonZeroU8;
 use crate::constants::{MAX_MESSAGE_SIZE, TCP_ASSOC_META_SIZE};
 use crate::packets::byte_packet::BytePacket;
 
 pub struct TcpAssociation {
-    stream_count: u8,
+    stream_count: NonZeroU8,
     control_stream: TcpStream,
     streams: Vec<TcpStream>,
 }
@@ -14,7 +15,7 @@ impl TcpAssociation{
     /// Creates a new TcpAssociation.
     fn new(stream_count: u8,control_stream: TcpStream) -> Self{
         Self{
-            stream_count,
+            stream_count: NonZeroU8::new(stream_count).unwrap_or(unsafe{NonZeroU8::new_unchecked(1)}),
             control_stream,
             streams: Vec::with_capacity(stream_count as usize),
         }
@@ -47,7 +48,7 @@ impl TcpAssociation{
         }
 
         let mut assoc = Self::new(final_stream_count, control_stream);
-        for _ in 0..assoc.stream_count {
+        for _ in 0..assoc.stream_count.get() {
             assoc.streams.push(TcpStream::connect(&to)?);
         }
 
@@ -57,19 +58,19 @@ impl TcpAssociation{
 
     /// Stream count getter.
     pub fn stream_count(&self) -> u8{
-        self.stream_count
+        self.stream_count.get()
     }
 
     /// Clones the association using try_clone call on each stream.
     pub fn try_clone(&self) -> Result<Self>{
 
-        let mut new_streams = Vec::with_capacity(self.stream_count as usize);
+        let mut new_streams = Vec::with_capacity(self.stream_count.get() as usize);
 
         for stream in &self.streams{
             new_streams.push(stream.try_clone()?);
         }
 
-        let mut assoc = Self::new(self.stream_count,self.control_stream.try_clone()?);
+        let mut assoc = Self::new(self.stream_count.get(),self.control_stream.try_clone()?);
         assoc.streams = new_streams;
 
         Ok(assoc)
@@ -87,7 +88,7 @@ impl TcpAssociation{
             return Err(Error::new(ErrorKind::Other, "Message too big"));
         }
 
-        if stream > self.stream_count as usize{
+        if stream > self.stream_count.get() as usize{
             return Err(Error::new(ErrorKind::Other, "Invalid stream index"));
         }
 
@@ -207,7 +208,7 @@ impl TcpAssociationListener{
 
         // Create the association and accept the incoming connections
         let mut assoc = TcpAssociation::new(final_stream_count, control_stream);
-        for _ in 0..assoc.stream_count{
+        for _ in 0..assoc.stream_count.get(){
             let (stream,addr) = self.listener.accept()?;
             assoc.streams.push(stream);
             addresses.push(addr);
@@ -246,6 +247,8 @@ impl<'a> Incoming<'a>{
 impl<'a> Iterator for Incoming<'a>{
     
     type Item = Result<TcpAssociation>;
+    
+    /// Accept a request or return None if accept fails.
     fn next(&mut self) -> Option<Self::Item> {
         match self.assoc_listener.accept(){
             Ok((assoc,_addr)) => Some(Ok(assoc)),

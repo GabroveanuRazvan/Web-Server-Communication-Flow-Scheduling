@@ -20,15 +20,16 @@ pub struct TcpConnectionScheduler {
 
 impl TcpConnectionScheduler {
 
-    
-    pub fn new(num_workers: usize, assoc: TcpAssociation, packet_size: usize) -> Self{
-        assert!(num_workers > 0);
+    /// Create a new thread pool of the size of the stream count of the provided association.
+    /// Initializes the sorted queue (heap).
+    pub fn new(assoc: TcpAssociation, packet_size: usize) -> Self{
         assert!(packet_size > CHUNK_METADATA_SIZE);
 
-        let mut workers = Vec::with_capacity(num_workers);
+        let worker_count = assoc.stream_count() as usize;
+        let mut workers = Vec::with_capacity(worker_count);
         let heap = Arc::new((Mutex::new(Some(BinaryHeap::new())), Condvar::new()));
 
-        for i in 0..num_workers {
+        for i in 0..worker_count {
             workers.push(ConnectionWorker::new(i, Arc::clone(&heap),assoc.try_clone().unwrap(), packet_size));
         }
 
@@ -57,12 +58,12 @@ impl TcpConnectionScheduler {
         cvar.notify_one();
     }
 
-    
+    /// Consumes the scheduler and starts listening for requests.        
     pub fn start(mut self){
         
         loop {
             
-            let mut message_info  = match self.assoc.receive(){
+            let message_info  = match self.assoc.receive(){
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                 Ok(message_info) => message_info,
                 Err(e) => panic!("{}", e),
@@ -133,7 +134,7 @@ impl Drop for TcpConnectionScheduler
     }
 }
 
-/// Worker for the ConnectionScheduler.
+/// Worker for the TcpConnectionScheduler.
 pub struct ConnectionWorker{
     label: usize,
     thread: Option<JoinHandle<()>>,

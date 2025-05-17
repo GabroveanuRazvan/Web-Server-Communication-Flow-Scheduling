@@ -5,6 +5,7 @@ use std::io::Result;
 use crate::config::tcp_assoc_server_config::TcpAssocServerConfig;
 use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 use crate::pools::scheduling::tcp_connection_scheduler::TcpConnectionScheduler;
+use crate::pools::scheduling::tcp_round_robin_scheduler::TcpRoundRobinScheduler;
 use crate::tcp::tcp_association::{TcpAssociation, TcpAssociationListener};
 
 pub struct TcpAssocServer{
@@ -13,6 +14,7 @@ pub struct TcpAssocServer{
 
 impl TcpAssocServer{
     
+    /// Start the association listener and handle the clients.
     pub fn start(mut self) -> Result<()>{
         
         println!("Server started and listening on {:?}",self.assoc_listener.local_addr());
@@ -29,21 +31,23 @@ impl TcpAssocServer{
         
     }
     
+    /// Based on the chosen scheduler, wait to receive requests from the provided association.
     pub fn handle_client(assoc: TcpAssociation) -> Result<()>{
         
         println!("Connected to {:#?}",assoc.peer_addresses());
         println!("Scheduling policy: {:?}",TcpAssocServerConfig::scheduling_policy());
         
         match TcpAssocServerConfig::scheduling_policy(){
-            SchedulingPolicy::ShortestConnectionFirst =>{
-                
-                let scheduler = TcpConnectionScheduler::new(assoc.stream_count() as usize,
-                                                            assoc,
-                                                            TcpAssocServerConfig::file_packet_size());
-                
+            
+            SchedulingPolicy::ShortestConnectionFirst => {
+                let scheduler = TcpConnectionScheduler::new(assoc,TcpAssocServerConfig::file_packet_size());
                 scheduler.start();
-                
             },
+            
+            SchedulingPolicy::RoundRobin => {
+                let scheduler = TcpRoundRobinScheduler::new(assoc,TcpAssocServerConfig::file_packet_size());
+                scheduler.start();
+            }
             
             _ => panic!("Unknown scheduling policy"), 
         }
