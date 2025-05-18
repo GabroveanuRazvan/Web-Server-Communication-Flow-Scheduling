@@ -49,7 +49,7 @@ impl TcpRoundRobinScheduler {
             let (file_buffer,path,ppid) = job;
             let path_bytes = &path.as_bytes()[1..];
             let file_size = file_buffer.len();
-            let stream_number = job_index as usize;
+            let stream_number = job_index;
 
             
             // Send a metadata packet made out of file_size + file_path

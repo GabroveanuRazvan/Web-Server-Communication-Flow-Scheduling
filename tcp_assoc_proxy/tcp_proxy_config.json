@@ -2,9 +2,9 @@
   "browser_server_address": "0.0.0.0",
   "browser_server_port": 7879,
 
-  "peer_address": "192.168.1.143",
+  "peer_address": "192.168.50.251",
   "peer_port": 7878,
 
   "thread_count": 12,
-  "stream_count": 8
+  "stream_count": 12
 }

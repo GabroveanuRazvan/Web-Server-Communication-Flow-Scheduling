@@ -153,7 +153,7 @@ impl ConnectionWorker{
 
                 // Get a reference to the mutex and cond var
                 let (mutex,cvar) = &*heap;
-                let stream_number = label;
+                let stream_number = label as u8;
 
                 loop{
 

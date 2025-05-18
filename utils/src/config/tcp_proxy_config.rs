@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use crate::config::serialization::load;
-use crate::config::tcp_server_config::TcpServerConfig;
 use crate::constants::TCP_PROXY_CONFIG_PATH_ENV;
 
 static TCP_PROXY_CONFIG: OnceLock<TcpProxyConfig> = OnceLock::new();
@@ -20,6 +19,8 @@ pub struct TcpProxyConfig{
     peer_port: u16,
     
     thread_count: usize,
+    // Used in tcp assoc configurations
+    stream_count: u8,
     
 }
 
@@ -61,6 +62,10 @@ impl TcpProxyConfig{
         Self::get_config().thread_count
     }
     
+    pub fn stream_count() -> u8 {
+        Self::get_config().stream_count
+    }
+    
 }
 
 #[cfg(test)]
@@ -87,6 +92,7 @@ mod tests{
         assert_eq!(TcpProxyConfig::peer_port(),7878);
         assert_eq!(*TcpProxyConfig::browser_server_address(),Ipv4Addr::UNSPECIFIED);
         assert_eq!(TcpProxyConfig::browser_server_port(),7879);
+        assert_eq!(TcpProxyConfig::stream_count(),8);
     }
     
     

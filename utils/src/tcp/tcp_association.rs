@@ -80,7 +80,7 @@ impl TcpAssociation{
     /// Sends a message through a stream.
     /// The message will have a ppid attached to its payload.
     /// The stream number will be sent through the command stream.
-    pub fn send(&mut self,message: &[u8], stream: usize, ppid: u32) -> Result<()>{
+    pub fn send(&mut self,message: &[u8], stream: u8, ppid: u32) -> Result<()>{
 
         // Check for errors
         let message_size = message.len();
@@ -88,7 +88,7 @@ impl TcpAssociation{
             return Err(Error::new(ErrorKind::Other, "Message too big"));
         }
 
-        if stream > self.stream_count.get() as usize{
+        if stream > self.stream_count.get(){
             return Err(Error::new(ErrorKind::Other, "Invalid stream index"));
         }
 
@@ -104,7 +104,7 @@ impl TcpAssociation{
         }
 
         // Send the packet on the designated stream, and the stream index on the control stream
-        self.streams[stream].write_all(byte_packet.get_buffer())?;
+        self.streams[stream as usize].write_all(byte_packet.get_buffer())?;
         self.control_stream.write_all((stream as u8).to_be_bytes().as_slice())?;
 
         Ok(())

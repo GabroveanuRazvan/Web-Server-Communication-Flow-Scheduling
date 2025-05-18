@@ -8,7 +8,10 @@ fn main() {
 
    let stream_count = 12;
    
-   let mut assoc = TcpAssociation::connect("127.0.0.1:7878",stream_count).unwrap();
+   let mut assoc = TcpAssociation::connect("192.168.50.30:7878",stream_count).unwrap();
+   
+   let stream_count = assoc.stream_count();
+   println!("Stream count {}", stream_count);
    
    let mut current_stream = 0;
    
@@ -34,7 +37,7 @@ fn main() {
       }
       println!("Received! {:?} {} {stream}", file_path,file_size);
       current_stream += 1;
-      current_stream = (current_stream + 1) % stream_count as usize;
+      current_stream = (current_stream + 1) % stream_count;
    }
    
    
