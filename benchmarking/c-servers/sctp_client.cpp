@@ -112,7 +112,7 @@ int main(){
 
         auto header = HttpGetHeader(request);
 
-        auto start_time = std::chrono::high_resolution_clock::now();
+
 
         // Send the request
         if(sctp_sendmsg(sock_fd,header.c_str(),header.size(), nullptr,0,0,0,0,0,0) < 0){
@@ -135,9 +135,11 @@ int main(){
             break;
         }
 
+        // Start the timer when receiving the file
+        auto start_time = std::chrono::high_resolution_clock::now();
+
         size_t content_length = extract_content_length(buffer);
         size_t current_length = 0;
-
 
         // Receive the data in a loop until the file is downloaded
         while(current_length < content_length){

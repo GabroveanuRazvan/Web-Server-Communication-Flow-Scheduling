@@ -42,7 +42,7 @@ impl TcpAssocRelay {
         // Run the assoc client threads
         self.receiver_assoc_thread = Some(Self::receiver_assoc_thread(receiver_assoc_stream, Arc::clone(&channel_map)));
         self.sender_assoc_thread = Some(Self::sender_assoc_thread(sender_assoc, assoc_rx));
-        Self::get_browser_requests(assoc_tx, channel_map, assoc.stream_count() as usize)?;
+        Self::get_browser_requests(assoc_tx, channel_map, self.worker_count)?;
 
         Ok(())
     }

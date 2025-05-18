@@ -2,7 +2,7 @@
   "browser_server_address": "0.0.0.0",
   "browser_server_port": 7879,
 
-  "peer_address": "192.168.50.251",
+  "peer_address": "192.168.50.30",
   "peer_port": 7878,
 
   "thread_count": 12,

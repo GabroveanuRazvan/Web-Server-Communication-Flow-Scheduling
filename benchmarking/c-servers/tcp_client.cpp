@@ -137,7 +137,7 @@ int main(){
 
         auto header = HttpGetHeader(request);
 
-        auto start_time = std::chrono::high_resolution_clock::now();
+
 
         // Send the request
         if(send(sock_fd,header.c_str(),header.size(),0) < 0){
@@ -155,6 +155,9 @@ int main(){
         if(response_header.empty()){
             break;
         }
+
+        // Start the time when starting to receive the file
+        auto start_time = std::chrono::high_resolution_clock::now();
 
         size_t content_length = extract_content_length(response_header.c_str());
         size_t current_length = residue_bytes.size();

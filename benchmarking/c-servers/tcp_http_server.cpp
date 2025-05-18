@@ -14,8 +14,9 @@
 
 const uint16_t PORT = 7878;
 const int KILOBYTE = 1024;
-const char* SERVER_ROOT = "./benchmark_raw_dataset";
+const char* SERVER_ROOT = "../benchmark_raw_dataset";
 const size_t SENDER_BUFFER_SIZE = 104 * KILOBYTE;
+const size_t CHUNK_SIZE = 16 * KILOBYTE;
 
 std::string recv_response_header(int sock_fd) {
 
@@ -117,7 +118,8 @@ bool send_file(int client_fd, const std::string& file_path){
     // Send the file in chunks until it is processed
     while(current_sent < file_size){
 
-        size_t bytes_sent = send(client_fd,mmap_file + current_sent,file_size - current_sent,0);
+        size_t bytes_to_send = std::min(CHUNK_SIZE,file_size - current_sent);
+        size_t bytes_sent = send(client_fd,mmap_file + current_sent,bytes_to_send,0);
         if(bytes_sent < 0){
             std::cerr << "Send: " << std::strerror(errno) << std::endl;
             munmap(mmap_file,file_size);
@@ -126,7 +128,7 @@ bool send_file(int client_fd, const std::string& file_path){
             return false;
         }
 
-        current_sent += bytes_sent;
+        current_sent += bytes_to_send;
 
     }
 
