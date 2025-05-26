@@ -49,9 +49,7 @@ fn main() {
 
     for (idx,request) in requests.iter().enumerate() {
         let http_header = HttpGetHeader(request);
-
-        let start = Instant::now();
-
+        
         // Send the request
         sctp_client.write_all(http_header.as_bytes(), 0, 0, 0).unwrap();
 
@@ -61,6 +59,8 @@ fn main() {
         let file_size = extract_content_length(&buffer).expect("Failed to extract content");
         let mut current_size = 0;
 
+        let start = Instant::now();
+        
         while current_size < file_size {
             let bytes_received = sctp_client.read(&mut buffer, None, None).unwrap();
             current_size += bytes_received;
@@ -145,7 +145,7 @@ pub fn extract_content_length(buffer: &[u8]) -> Option<usize>{
 
     for line in text.lines(){
 
-        if let Some(rest) = line.strip_prefix("Content-Length: ") {
+        if let Some(rest) = line.strip_prefix("content-length: ") {
             return rest.trim().parse::<usize>().ok();
         }
 

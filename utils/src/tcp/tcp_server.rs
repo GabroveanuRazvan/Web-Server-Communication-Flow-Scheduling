@@ -7,6 +7,7 @@ use memmap2::Mmap;
 use crate::constants::REQUEST_BUFFER_SIZE;
 use crate::http_parsers::{basic_http_response, extract_uri, http_response_to_string};
 use crate::pools::thread_pool::ThreadPool;
+use crate::tcp::tcp_extended::HtmlReadable;
 
 pub struct TcpServer{
     address: SocketAddrV4,
@@ -44,24 +45,17 @@ impl TcpServer {
         'stream_loop: loop{
             
             match stream.read(&mut buffer){
-                Err(ref error ) if error.kind() == ErrorKind::ConnectionReset =>{
-                    eprintln!("Connection reset by peer");
+                Err(error ) => {
+                    eprintln!("Connection handler: {}",error);
                     break 'stream_loop
                 },
                 
-                Err(error) => return Err(error),
-                
-                Ok(0) => {
-                    println!("Connection closed.");
-                    break 'stream_loop;
-                }
-                
                 Ok(_bytes_received) => {
-                    // TODO better parsing
+                    
                     // Extract the first line of the request
-                    let new_line_position = buffer.iter().position(|&b| b == b'\n').unwrap();
+                    let new_line_position = buffer.iter().position(|&b| b == b'\n').expect("Unable to find newline in buffer");
                     let request_line = String::from_utf8_lossy(&buffer[..new_line_position]).to_string();
-
+                    
                     // Get the server-side file name, the cache side file name and path
                     let path_request = extract_uri(request_line).unwrap();
 
@@ -86,7 +80,7 @@ impl TcpServer {
                             .write(true)
                             .create(false)
                             .truncate(false)
-                            .open("./404.html").unwrap()
+                            .open("./404.html").expect("404")
                     });
                     
                     let mmap = unsafe{Mmap::map(&file)}?;

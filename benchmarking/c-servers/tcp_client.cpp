@@ -16,7 +16,7 @@
 const size_t KILOBYTE = 1024;
 
 const char* REQUESTS_FILE_PATH = "./requests.txt";
-const char* PEER_IPV4 = "127.0.0.1";
+const char* PEER_IPV4 = "192.168.50.30";
 const u_int16_t PORT = 7878;
 const size_t RECEIVE_BUFFER_SIZE = 1024 * KILOBYTE;
 

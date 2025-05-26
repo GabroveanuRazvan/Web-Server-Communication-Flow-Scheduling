@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::{SocketAddrV4, TcpStream};
+use std::net::{TcpStream};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -8,65 +8,73 @@ use utils::config::serialization::{load, save};
 use utils::constants::{KILOBYTE, MEGABYTE};
 use utils::libc_wrappers::SocketBuffers;
 
-const REQUESTS_PATH: &str = "./requests_list_10000.json";
-const EVENTS_PATH: &str = "./events_list_10000.json";
-const PEER_ADDRESS: &str = "192.168.50.30:7878";
+const REQUESTS_PATH_TEMPLATE: &str = "../benchmarking/requests/requests_";
+const EVENTS_PATH_TEMPLATE: &str = "./events_list_";
+const PEER_ADDRESS: &str = "192.168.50.251:7878";
 
 const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
 
 
 fn main() {
 
-    let requests: Vec<PathBuf> = load(REQUESTS_PATH).unwrap();
-    let num_requests = requests.len();
-    let mut events = vec![LocustEvent::default(); num_requests];
-    let mut tcp_client = TcpStream::connect(PEER_ADDRESS).unwrap();
-    
-    tcp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
-    
-    println!("Receive buffer size: {}",tcp_client.get_receive_buffer_size().unwrap());
-    
-    let mut total_time = 0f64;
-    let mut total_size = 0usize;
-    
-    thread::sleep(Duration::from_secs(5));
-    
-    for (idx,request) in requests.iter().enumerate() {
+    for i in 0 .. 12{
 
-        let http_header = HttpGetHeader(request);
-
-        let start = Instant::now();
-
-        tcp_client.write_all(http_header.as_bytes()).unwrap();
-
-        let (response,residue) = get_http_header(&mut tcp_client);
-
-        let file_size = extract_content_length(&response).unwrap();
-        let mut current_length = residue.len();
+        let requests_path = format!("{REQUESTS_PATH_TEMPLATE}{i}.json");
+        let events_path = format!("{EVENTS_PATH_TEMPLATE}{i}.json");
         
-        let mut buffer = [0u8;16 * KILOBYTE];
+        
+        let requests: Vec<PathBuf> = load(requests_path).unwrap();
+        let num_requests = requests.len();
+        let mut events = vec![LocustEvent::default(); num_requests];
+        let mut tcp_client = TcpStream::connect(PEER_ADDRESS).unwrap();
 
-        while current_length < file_size {
+        tcp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
 
-            let bytes_received = tcp_client.read(&mut buffer).unwrap();
-            current_length += bytes_received;
+        println!("Receive buffer size: {}",tcp_client.get_receive_buffer_size().unwrap());
 
+        let mut total_time = 0f64;
+        let mut total_size = 0usize;
+
+        thread::sleep(Duration::from_secs(1));
+
+        for (idx,request) in requests.iter().enumerate() {
+
+            let http_header = HttpGetHeader(request);
+            
+            tcp_client.write_all(http_header.as_bytes()).unwrap();
+
+            let (response,residue) = get_http_header(&mut tcp_client);
+
+            let file_size = extract_content_length(&response).unwrap();
+            let mut current_length = residue.len();
+
+            let mut buffer = [0u8;16 * KILOBYTE];
+
+            let start = Instant::now();
+
+            while current_length < file_size {
+
+                let bytes_received = tcp_client.read(&mut buffer).unwrap();
+                current_length += bytes_received;
+
+            }
+
+            let end = start.elapsed().as_secs_f64();
+
+            total_time += end;
+            total_size +=  file_size;
+
+            events[idx] = LocustEvent::new(String::from("TCP"), format!("GET {}", request.display()), end, file_size);
+            println!("{idx}");
         }
 
-        let end = start.elapsed().as_secs_f64();
+        let throughput = total_size as f64 / total_time;
 
-        total_time += end;
-        total_size +=  file_size;
+        let data = LocustData::new(events, total_time,throughput);
+        save(data,events_path).unwrap();
 
-        events[idx] = LocustEvent::new(String::from("TCP"), format!("GET {}", request.display()), end, file_size);
-        println!("{idx}");
     }
-
-    let throughput = total_size as f64 / total_time;
-
-    let data = LocustData::new(events, total_time,throughput);
-    save(data,EVENTS_PATH).unwrap();
-
+    
 }
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
@@ -74,7 +82,6 @@ struct LocustData{
     total_time: f64,
     throughput: f64,
     events: Vec<LocustEvent>,
-
 }
 
 impl LocustData{

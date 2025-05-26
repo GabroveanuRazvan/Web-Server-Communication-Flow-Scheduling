@@ -390,34 +390,3 @@ pub trait SocketBuffers{
     fn get_send_buffer_size(&self) -> Result<usize>;
     fn get_receive_buffer_size(&self) -> Result<usize>;
 }
-
-
-impl SocketBuffers for TcpStream{
-    fn set_send_buffer_size(&self,buffer_size: usize) -> Result<i32>{
-        let fd = self.as_raw_fd();
-        safe_setsockopt(fd,SOL_SOCKET,SO_SNDBUF,&buffer_size.to_le_bytes())
-    }
-
-    fn set_receive_buffer_size(&self,buffer_size: usize) -> Result<i32>{
-        let fd = self.as_raw_fd();
-        safe_setsockopt(fd,SOL_SOCKET,SO_RCVBUF,&buffer_size.to_le_bytes())
-    }
-
-    fn get_send_buffer_size(&self) -> Result<usize>{
-        let fd = self.as_raw_fd();
-        let mut num_bytes = [0u8;8];
-
-       safe_getsockopt(fd,SOL_SOCKET,SO_SNDBUF,&mut num_bytes).map(|_|{
-           usize::from_le_bytes(num_bytes)
-       })
-    }
-
-    fn get_receive_buffer_size(&self) -> Result<usize>{
-        let fd = self.as_raw_fd();
-        let mut num_bytes = [0u8;8];
-
-        safe_getsockopt(fd,SOL_SOCKET,SO_RCVBUF,&mut num_bytes).map(|_|{
-            usize::from_le_bytes(num_bytes)
-        })
-    }
-}

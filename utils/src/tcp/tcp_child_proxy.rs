@@ -14,6 +14,7 @@ use crate::config::sctp_proxy_config::SctpProxyConfig;
 use crate::constants::{BROWSER_CHUNK_SIZE, INOTIFY_BUFFER_SIZE, REQUEST_BUFFER_SIZE};
 use crate::logger::Logger;
 use crate::pools::thread_pool::ThreadPool;
+use crate::tcp::tcp_extended::HtmlReadable;
 
 /// Maps each cache file name to a reference count mutex and condvar
 /// Used to signal multiple waiting threads for requested files
@@ -64,19 +65,14 @@ impl TcpProxy{
 
         loop{
 
-            match stream.read(&mut buffer){
-
-                // The browser closes the connection, just end the function
-                Err(ref error) if error.kind() == ErrorKind::ConnectionReset => break,
-                Err(error) => return Err(error),
-
-                Ok(0) => {
+            match stream.receive_header(&mut buffer){
+                Err(e) => {
+                    eprintln!("Thread named {} received {} aborting...",thread::current().name().unwrap_or("unnamed"),e);
                     break;
                 }
-
+                
                 Ok(_bytes_received) => {
-
-                    // TODO better parsing
+                    
                     // Extract the first line of the request
                     let new_line_position = buffer.iter().position(|&b| b == b'\n').unwrap();
                     let request_line = String::from_utf8_lossy(&buffer[..new_line_position]).to_string();
@@ -98,9 +94,7 @@ impl TcpProxy{
 
                     // If the requested file does not exist in the cache, send a request to the SCTP proxy, and wait for the file to be downloaded
                     if !cache_file_path.exists(){
-
-                        // LOGGER.writeln(format!("Cache  miss: {}",cache_file_path.display()).as_str());
-
+                        
                         // Send the request to the sctp proxy
                         writer_tx.send(file_path_request).map_err(
                             |e| Error::new(ErrorKind::Other,format!("Error sending file request: {}",e))

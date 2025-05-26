@@ -48,6 +48,8 @@ pub mod tcp{
     pub mod tcp_association;
     pub mod tcp_assoc_server;
     pub mod tcp_assoc_proxy;
+    
+    pub mod tcp_extended;
 }
 
 pub mod libc_wrappers;
