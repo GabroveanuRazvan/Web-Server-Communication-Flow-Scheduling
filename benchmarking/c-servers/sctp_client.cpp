@@ -7,7 +7,6 @@
 #include <fstream>
 #include <chrono>
 
-
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -23,8 +22,6 @@ const char* REQUESTS_FILE_PATH = "./requests.txt";
 const char* PEER_IPV4 = "192.168.50.30";
 const u_int16_t PORT = 7878;
 const size_t RECEIVE_BUFFER_SIZE = 1024 * KILOBYTE;
-
-
 
 std::vector<std::string> load_requests(const std::string& filename) {
     std::vector<std::string> requests;
@@ -100,6 +97,17 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    // Enable data io
+    struct sctp_event_subscribe events;
+    bzero(&events,sizeof(events));
+    events.sctp_data_io_event = 1;
+
+    if(setsockopt(sock_fd,IPPROTO_SCTP,SCTP_EVENTS,&events,sizeof(events)) < 0){
+        perror("setsockopt");
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
     // Connect to the peer
     if(connect(sock_fd,(struct sockaddr*)&peer_addr,sizeof(peer_addr)) == -1){
         std::cerr << "connect: " << std::strerror(errno) << std::endl;
@@ -108,10 +116,13 @@ int main(){
     }
 
     int request_index = 0;
+
+    struct sctp_sndrcvinfo info = {0};
+    socklen_t info_len = sizeof(info);
+
     for(const auto& request : requests){
 
         auto header = HttpGetHeader(request);
-
 
 
         // Send the request
@@ -124,7 +135,7 @@ int main(){
         // Receive the response
         int bytes_received = 0;
 
-        if(( bytes_received = sctp_recvmsg(sock_fd,buffer,sizeof(buffer), nullptr, nullptr, nullptr, nullptr)) < 0){
+        if(( bytes_received = sctp_recvmsg(sock_fd,buffer,sizeof(buffer), nullptr, nullptr, &info, nullptr)) < 0){
             std::cerr << "Recv msg: " << std::strerror(errno) << std::endl;
             close(sock_fd);
             exit(EXIT_FAILURE);
@@ -144,7 +155,7 @@ int main(){
         // Receive the data in a loop until the file is downloaded
         while(current_length < content_length){
 
-            if(( bytes_received = sctp_recvmsg(sock_fd,buffer,sizeof(buffer), nullptr, nullptr, nullptr, nullptr)) < 0){
+            if(( bytes_received = sctp_recvmsg(sock_fd,buffer,sizeof(buffer), nullptr, nullptr, &info, nullptr)) < 0){
                 std::cerr << "Recv msg: " << std::strerror(errno) << std::endl;
                 close(sock_fd);
                 exit(EXIT_FAILURE);

@@ -14,9 +14,11 @@
 
 const uint16_t PORT = 7878;
 const int KILOBYTE = 1024;
-const char* SERVER_ROOT = "./benchmark_raw_dataset";
+const char* SERVER_ROOT = "../benchmark_raw_dataset";
 const size_t CHUNK_SIZE = 16 * KILOBYTE;
 const size_t SENDER_BUFFER_SIZE = 1024 * KILOBYTE;
+
+uint16_t MAX_STREAM_NUM = 4;
 
 
 std::string recv_response_header(int client_fd) {
@@ -100,16 +102,20 @@ bool send_file(int client_fd, const std::string& file_path){
         return false;
     }
 
+    uint16_t stream_index = 0;
+
     // Prepare a response header and send it
     auto response_header = make_http_response_header(file_size);
 
-    if(sctp_sendmsg(client_fd,response_header.c_str(),response_header.size(), nullptr, 0,0,0,0,0,0) < 0){
+    if(sctp_sendmsg(client_fd,response_header.c_str(),response_header.size(), nullptr, 0,0,0,stream_index,.0,0) < 0){
         std::cerr << "Sctp Send: " << std::strerror(errno) << std::endl;
         munmap(mmap_file,file_size);
         close(client_fd);
         close(fd);
         return false;
     }
+
+    stream_index = (stream_index + 1) % MAX_STREAM_NUM;
 
     // Send the file in chunks until it is processed
     size_t current_sent = 0;
@@ -124,7 +130,7 @@ bool send_file(int client_fd, const std::string& file_path){
                                          0,
                                          0,
                                          0,
-                                         0,
+                                         stream_index,
                                          0,
                                          0);
         if(bytes_sent < 0){
@@ -135,6 +141,7 @@ bool send_file(int client_fd, const std::string& file_path){
             return false;
         }
 
+        stream_index = (stream_index + 1) % MAX_STREAM_NUM;
         current_sent += CHUNK_SIZE;
 
     }
@@ -171,6 +178,18 @@ int main(){
     int opt = 1;
     if(setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0){
         std::cerr << "setsockopt: " << std::strerror(errno) << std::endl;
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
+
+    // Enable data io
+    struct sctp_event_subscribe events;
+    bzero(&events,sizeof(events));
+    events.sctp_data_io_event = 1;
+
+    if(setsockopt(sock_fd,IPPROTO_SCTP,SCTP_EVENTS,&events,sizeof(events)) < 0){
+        perror("setsockopt");
         close(sock_fd);
         exit(EXIT_FAILURE);
     }
