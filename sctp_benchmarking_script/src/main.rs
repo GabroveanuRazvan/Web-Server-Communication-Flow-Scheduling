@@ -9,8 +9,8 @@ use utils::libc_wrappers::SocketBuffers;
 use utils::sctp::sctp_api::SctpPeerBuilder;
 use utils::sctp::sctp_client::{SctpStreamBuilder};
 
-const REQUESTS_PATH: &str = "./requests_list_10000.json";
-const EVENTS_PATH: &str = "./events_list_10000.json";
+const REQUESTS_PATH_TEMPLATE: &str = "../benchmarking/requests/requests_";
+const EVENTS_PATH_TEMPLATE: &str = "./events_list_";
 
 const PEER_ADDRESS: &str = "192.168.50.30:7878";
 const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
@@ -18,69 +18,77 @@ const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
 
 fn main() {
 
-    let mut buffer = [0u8;64 * KILOBYTE];
-    let requests: Vec<PathBuf> = load(REQUESTS_PATH).unwrap();
-    let num_requests = requests.len();
-    let mut events = vec![LocustEvent::default(); num_requests];
-
-    let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
-
-    // Create the sctp client and connect
-    let mut sctp_client = SctpStreamBuilder::new()
-        .socket()
-        .address(socket_address.ip().clone())
-        .port(socket_address.port())
-        .set_incoming_streams(10)
-        .set_outgoing_streams(10)
-        .ttl(0)
-        .build();
-
-    sctp_client.connect();
-
-
-    sctp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
-
-    println!("Receive buffer size: {}",sctp_client.get_receive_buffer_size().unwrap());
-
-    thread::sleep(Duration::from_secs(5));
-
-    let mut total_time = 0f64;
-    let mut total_size = 0usize;
-
-    for (idx,request) in requests.iter().enumerate() {
-        let http_header = HttpGetHeader(request);
+    for i in 0..12{
         
-        // Send the request
-        sctp_client.write_all(http_header.as_bytes(), 0, 0, 0).unwrap();
+        let requests_path = format!("{REQUESTS_PATH_TEMPLATE}{i}.json");
+        let events_path = format!("{EVENTS_PATH_TEMPLATE}{i}.json");
 
-        // Get the response
-        sctp_client.read(&mut buffer, None, None).unwrap();
+        let mut buffer = [0u8;64 * KILOBYTE];
+        let requests: Vec<PathBuf> = load(requests_path).unwrap();
+        let num_requests = requests.len();
+        let mut events = vec![LocustEvent::default(); num_requests];
 
-        let file_size = extract_content_length(&buffer).expect("Failed to extract content");
-        let mut current_size = 0;
+        let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
 
-        let start = Instant::now();
-        
-        while current_size < file_size {
-            let bytes_received = sctp_client.read(&mut buffer, None, None).unwrap();
-            current_size += bytes_received;
+        // Create the sctp client and connect
+        let mut sctp_client = SctpStreamBuilder::new()
+            .socket()
+            .address(socket_address.ip().clone())
+            .port(socket_address.port())
+            .set_incoming_streams(10)
+            .set_outgoing_streams(10)
+            .ttl(0)
+            .build();
+
+        sctp_client.connect();
+
+
+        sctp_client.set_receive_buffer_size(RECEIVE_BUFFER_SIZE).unwrap();
+
+        println!("Receive buffer size: {}",sctp_client.get_receive_buffer_size().unwrap());
+
+        thread::sleep(Duration::from_secs(5));
+
+        let mut total_time = 0f64;
+        let mut total_size = 0usize;
+
+        for (idx,request) in requests.iter().enumerate() {
+            let http_header = HttpGetHeader(request);
+
+            // Send the request
+            sctp_client.write_all(http_header.as_bytes(), 0, 0, 0).unwrap();
+
+            // Get the response
+            sctp_client.read(&mut buffer, None, None).unwrap();
+
+            let file_size = extract_content_length(&buffer).expect("Failed to extract content");
+            let mut current_size = 0;
+
+            let start = Instant::now();
+
+            while current_size < file_size {
+                let bytes_received = sctp_client.read(&mut buffer, None, None).unwrap();
+                current_size += bytes_received;
+            }
+
+            let end = start.elapsed().as_secs_f64();
+
+            // Store the request data
+            total_time += end;
+            total_size +=  file_size;
+
+            events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
+            println!("{idx}");
         }
 
-        let end = start.elapsed().as_secs_f64();
-
-        // Store the request data
-        total_time += end;
-        total_size +=  file_size;
-
-        events[idx] = LocustEvent::new(String::from("SCTP"), format!("GET {}", request.display()), end, file_size);
-        println!("{idx}");
-    }
-
-    // Compute the throughput and store the data as json files
+        // Compute the throughput and store the data as json files
         let throughput = total_size as f64 / total_time;
 
-    let data = LocustData::new(events, total_time,throughput);
-    save(data,EVENTS_PATH).unwrap();
+        let data = LocustData::new(events, total_time,throughput);
+        save(data,events_path).unwrap();
+        
+    }
+    
 
 }
 

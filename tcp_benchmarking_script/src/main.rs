@@ -10,7 +10,7 @@ use utils::libc_wrappers::SocketBuffers;
 
 const REQUESTS_PATH_TEMPLATE: &str = "../benchmarking/requests/requests_";
 const EVENTS_PATH_TEMPLATE: &str = "./events_list_";
-const PEER_ADDRESS: &str = "192.168.50.251:7878";
+const PEER_ADDRESS: &str = "192.168.50.30:7878";
 
 const RECEIVE_BUFFER_SIZE: usize = 1 * MEGABYTE;
 
