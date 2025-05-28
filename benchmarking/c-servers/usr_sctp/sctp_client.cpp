@@ -20,7 +20,7 @@
 const size_t KILOBYTE = 1024;
 
 const char* REQUESTS_FILE_PATH = "./requests.txt";
-const char* PEER_IPV4 = "127.0.0.1";
+const char* PEER_IPV4 = "192.168.50.30";
 
 const uint16_t LOCAL_ENCAPSULATION_PORT = 22222;
 const uint16_t REMOTE_ENCAPSULATION_PORT = 11111;
@@ -107,6 +107,13 @@ int main(){
     if (usrsctp_setsockopt(sctp_sock, IPPROTO_SCTP, SCTP_REMOTE_UDP_ENCAPS_PORT, (const void*)&encaps, (socklen_t)sizeof(struct sctp_udpencaps)) < 0) {
         std::cerr << "setsockopt: " << std::strerror(errno) << std::endl;
         usrsctp_close(sctp_sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // Enable receive ancillary data
+    const int on = 1;
+    if (usrsctp_setsockopt(sctp_sock, IPPROTO_SCTP, SCTP_RECVRCVINFO, &on, sizeof(int)) < 0) {
+        std::cerr << "usrsctp_setsockopt SCTP_RECVRCVINFO " << std::strerror(errno) << std::endl;
         exit(EXIT_FAILURE);
     }
 

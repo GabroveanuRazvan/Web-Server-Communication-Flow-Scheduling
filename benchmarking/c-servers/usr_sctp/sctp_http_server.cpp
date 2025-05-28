@@ -20,6 +20,8 @@ const char* SERVER_ROOT = "./benchmark_raw_dataset";
 const size_t CHUNK_SIZE = 16 * KILOBYTE;
 const size_t SENDER_BUFFER_SIZE = 1024 * KILOBYTE;
 
+const uint16_t MAX_STREAM_NUM = 4;
+
 
 std::string recv_response_header(struct socket* sctp_socket,struct sockaddr_in& peer_addr) {
 
@@ -115,28 +117,32 @@ bool send_file(struct socket* sctp_sock, const std::string& file_path,struct soc
         return false;
     }
 
+    uint16_t stream_index = 0;
+
     // Prepare a response header and send it
     auto response_header = make_http_response_header(file_size);
 
     // Send the file response
     struct sctp_sndinfo send_info;
     memset(&send_info, 0, sizeof(struct sctp_sndinfo));
-    send_info.snd_sid = 0;
+    send_info.snd_sid = stream_index;
     send_info.snd_ppid = htonl(42);
 
-    // baga adresa
+
     ssize_t bytes_sent = usrsctp_sendv(sctp_sock,
                                        response_header.c_str(),
                                        response_header.size(),
-                                       (struct sockaddr*)&peer_addr,
-                                       1,
+                                       nullptr,
+                                       0,
                                        &send_info,
                                        sizeof(send_info),
                                        SCTP_SENDV_SNDINFO,
                                        0);
 
+    stream_index = (stream_index + 1) % MAX_STREAM_NUM;
+
     if(bytes_sent < 0){
-        std::cerr << "Sctp Send: " << std::strerror(errno) << std::endl;
+        std::cerr << "Sctp Send Response: " << std::strerror(errno) << std::endl;
         munmap(mmap_file,file_size);
         usrsctp_close(sctp_sock);
         close(fd);
@@ -149,11 +155,13 @@ bool send_file(struct socket* sctp_sock, const std::string& file_path,struct soc
 
         ssize_t bytes_to_send = std::min(CHUNK_SIZE,file_size-current_sent);
 
+        send_info.snd_sid = stream_index;
+
         ssize_t bytes_sent = usrsctp_sendv(sctp_sock,
                                           mmap_file + current_sent,
                                           bytes_to_send,
-                                           (struct sockaddr*)&peer_addr,
-                                           1,
+                                           nullptr,
+                                           0,
                                           &send_info,
                                           sizeof(send_info),
                                           SCTP_SENDV_SNDINFO,
@@ -169,8 +177,9 @@ bool send_file(struct socket* sctp_sock, const std::string& file_path,struct soc
 
         current_sent += CHUNK_SIZE;
 
-    }
+        stream_index = (stream_index + 1) % MAX_STREAM_NUM;
 
+    }
 
     close(fd);
     munmap(mmap_file, file_size);
@@ -191,7 +200,7 @@ int main(){
     usrsctp_init(LOCAL_ENCAPSULATION_PORT, nullptr, nullptr);
 
     // Create the sctp socket
-    struct socket* sctp_sock = usrsctp_socket(AF_INET,SOCK_SEQPACKET,IPPROTO_SCTP,NULL,NULL,0,NULL);
+    struct socket* sctp_sock = usrsctp_socket(AF_INET,SOCK_STREAM,IPPROTO_SCTP,NULL,NULL,0,NULL);
     if(sctp_sock == nullptr){
         std::cerr << "Socket: " << std::strerror(errno) << std::endl;
         exit(EXIT_FAILURE);
@@ -248,15 +257,28 @@ int main(){
     struct sockaddr_in peer_addr = {0};
 
     while(true){
-        auto request = recv_response_header(sctp_sock,peer_addr);
 
-        if(request.empty())
-            break;
+        socklen_t len = 0;
+        struct socket* client_sock = usrsctp_accept(sctp_sock, nullptr,&len);
 
-        auto path = extract_http_path(request);
+        if(client_sock == nullptr){
+            std::cerr << "Accept: " << std::strerror(errno) << std::endl;
+            usrsctp_close(sctp_sock);
+            exit(EXIT_FAILURE);
+        }
 
-        if(!send_file(sctp_sock,path,peer_addr))
-            break;
+        while (true){
+            auto request = recv_response_header(client_sock,peer_addr);
+
+            if(request.empty())
+                break;
+
+            auto path = extract_http_path(request);
+
+            if(!send_file(client_sock,path,peer_addr))
+                break;
+        }
+
 
     }
 
@@ -265,3 +287,9 @@ int main(){
 }
 
 //export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+//Total test time: 1070.48 secs
+//Average throughput: 1.04578e+07 bytes/sec
+
+//Total test time: 1022.55 secs
+//Average throughput: 1.0948e+07 bytes/sec
