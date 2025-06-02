@@ -1,5 +1,5 @@
 [package]
-name = "sctp_proxy"
+name = "tcp_prefetch_benchmarking_script"
 version = "0.1.0"
 edition = "2021"
 

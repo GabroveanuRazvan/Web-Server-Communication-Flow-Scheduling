@@ -38,7 +38,7 @@ impl TcpServer {
     
     fn handle_client(mut stream: TcpStream, file_chunk_size: usize) -> Result<()>{
         
-        println!("New connection from {}", stream.peer_addr()?);
+        // println!("New connection from {}", stream.peer_addr()?);
         
         let mut buffer = [0u8;REQUEST_BUFFER_SIZE];
         
@@ -49,6 +49,8 @@ impl TcpServer {
                     eprintln!("Connection handler: {}",error);
                     break 'stream_loop
                 },
+                
+                Ok(0) => break 'stream_loop,
                 
                 Ok(_bytes_received) => {
                     
