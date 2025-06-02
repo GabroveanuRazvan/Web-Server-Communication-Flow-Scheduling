@@ -4,8 +4,8 @@ ARG UID
 ARG GID
 
 WORKDIR /locust
-COPY benchmark_dataset ./bencbenchmark_dataset
-COPY benchmark_raw_dataset ./benchmark_raw_dataset
+COPY dataset ./bencbenchmark_dataset
+COPY raw_dataset ./benchmark_raw_dataset
 COPY locust_benchmark_scripts ./locust_benchmark_scripts
 COPY requests ./requests
 COPY requirements.txt .

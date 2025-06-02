@@ -1,7 +1,7 @@
 {
   "address": "0.0.0.0",
   "port": 7878,
-  "root": "../sctp_server/web_files",
+  "root": "../benchmarking/raw_dataset",
   "stream_count": 12,
   "scheduling_policy": 1,
   "file_packet_size": 65536

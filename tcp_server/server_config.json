@@ -2,6 +2,6 @@
   "address": "0.0.0.0",
   "port": 7878,
   "thread_count": 12,
-  "server_root": "../sctp_server/web_files",
+  "server_root": "../benchmarking/raw_dataset",
   "file_packet_size": 16384
 }

@@ -50,7 +50,7 @@ MEGABYTE = 1024 * KILOBYTE
 
 NUM_FILES_PER_INTERVAL = 50
 TEMPLATE_PATH = "./template_raw.html"
-SAVE_PATH = "../benchmark_raw_dataset"
+SAVE_PATH = "../raw_dataset"
 
 # Clear the contents of the directory
 clear_dir(SAVE_PATH)

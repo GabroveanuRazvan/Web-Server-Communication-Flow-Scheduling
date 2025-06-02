@@ -10,8 +10,8 @@ WORKDIR /locust
 
 COPY requirements.txt .
 COPY locust_benchmark_scripts ./locust_benchmark_scripts
-COPY benchmark_dataset ./benchmark_dataset
-COPY benchmark_raw_dataset ./benchmark_raw_dataset
+COPY dataset ./benchmark_dataset
+COPY raw_dataset ./benchmark_raw_dataset
 COPY requests ./requests
 
 RUN mkdir results
