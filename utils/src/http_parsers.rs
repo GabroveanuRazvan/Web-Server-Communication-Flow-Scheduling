@@ -1,6 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::{fs, io};
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use http::{Method, Request, Response, StatusCode, Uri};
+use memmap2::Mmap;
+use path_clean::PathClean;
 use scraper::{Html, Selector};
 
 pub fn string_to_http_request(request_str: &str) -> Request<()> {
@@ -190,6 +195,75 @@ pub fn extract_http_paths(html_content: &str) -> Vec<String> {
 
     }
     paths
+}
+
+
+pub fn parse_root(root_path: impl AsRef<Path>) -> io::Result<VecDeque<String>> {
+  
+    let mut queue = VecDeque::new();
+    parse_root_helper(&root_path, &mut queue)?;
+    
+    let queue: VecDeque<String> = queue.into_iter().map(|path| {
+        let path = PathBuf::from(&path);
+        let stripped_path =  path.strip_prefix(&root_path).unwrap();
+        let html_path = String::from("/");
+        html_path + &stripped_path.display().to_string()
+    }).collect();
+    
+    Ok(queue)
+}
+
+fn parse_root_helper(root_path: impl AsRef<Path>, queue: &mut VecDeque<String>) -> io::Result<()> {
+
+    let entry_it = fs::read_dir(&root_path)?;
+    
+    for entry in entry_it{
+        
+        let entry_path = entry?.path();
+        
+        if entry_path.is_dir(){
+            parse_root_helper(&entry_path, queue)?;
+            continue;
+        }
+        
+        
+        if let Some(extension) = entry_path.extension() {
+            
+            if extension != "html"{
+                continue;
+            }
+            
+            let file = OpenOptions::new()
+                .read(true)
+                .create(false)
+                .write(false)
+                .open(&entry_path)?;
+            
+            let mmap = unsafe {Mmap::map(&file)?};
+            let file_content = String::from_utf8_lossy(&mmap);
+            let file_dependencies = extract_http_paths(&file_content);
+            
+            if file_dependencies.is_empty(){
+                continue;
+            }
+            
+            let entry_parent = entry_path.parent().unwrap();
+            file_dependencies.
+                into_iter().
+                map(|path|{
+                    let whole_path = PathBuf::from(entry_parent).join(path);
+                    let path = PathBuf::from(&whole_path).clean();
+                    path.display().to_string()
+                }).
+                for_each(|path| queue.push_back(path));
+
+            queue.push_back(entry_path.display().to_string());
+        }
+        
+    }
+    
+    Ok(())
+    
 }
 
 /// Encodes a path by replacing "/" with "__".

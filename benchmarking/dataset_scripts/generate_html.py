@@ -22,7 +22,7 @@ def flatten_dir(current_dir: str):
     return file_list
 
 
-root_dir = "./benchmark_dataset"
+root_dir = "../raw_dataset"
 htmls_dir_name =  "html_pages"
 html_dir_path = os.path.join(root_dir, htmls_dir_name)
 html_template_path = "template_images.html"

@@ -39,11 +39,11 @@ fn main() {
 
         let mut user_secs = 0.0;
         let mut user_total_size = 0;
-        
+
         (0..requests_per_user).for_each(|j| {
-            
+
             let start = Instant::now();
-            
+
             let request_index = i * USER_COUNT + j;
             let request = requests[request_index].as_path();
 
@@ -59,19 +59,20 @@ fn main() {
                 let bytes_received = user.read(&mut buffer,None,None).unwrap();
                 current_length += bytes_received;
             }
-            
+
             let end = start.elapsed().as_secs_f64();
-            
+
             user_total_size += file_size;
             user_secs += end;
 
         });
 
-        average_throughput = user_total_size as f64 / user_secs;
+        let user_throughput = user_total_size as f64 / user_secs;
+        average_throughput += user_throughput;
         total_time += user_secs;
 
         println!("User {i} time\t{user_secs}");
-        println!("Total user time:\t{total_time}");
+        println!("User throughput:\t{user_throughput}");
 
     });
 
@@ -97,3 +98,11 @@ fn extract_content_length(buffer: &[u8]) -> Option<usize>{
     None
 
 }
+
+
+// Total test time:        1399.9743759190005
+// Average throughput:     8539839.710247297
+//
+//
+// Total test time:        1618.7891264680002
+// Average throughput:     7389004.508294408
