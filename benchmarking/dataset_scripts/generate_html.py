@@ -32,7 +32,7 @@ img_content = """ <img src="{path}" width="100" height="100" alt="not working"> 
 all_images_paths = flatten_dir(root_dir)
 all_images_paths = [".." + os.sep + os.sep.join(file_path.split(os.sep)[2:])  for file_path in all_images_paths]
 
-pages_count = 10
+pages_count = 30
 min_images_count = min(10,len(all_images_paths))
 max_images_count = min(30,len(all_images_paths))
 

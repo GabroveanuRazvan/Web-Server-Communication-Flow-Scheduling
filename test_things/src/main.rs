@@ -1,45 +1,37 @@
-use std::fmt::format;
-use std::thread;
-use std::time::Duration;
-use utils::packets::byte_packet::BytePacket;
-use utils::tcp::tcp_association::{TcpAssociation, TcpAssociationListener};
+use rand::{thread_rng, Rng};
+use utils::config::serialization::save;
+use utils::html_prefetch_service::HtmlPrefetchService;
+
+const REQUEST_COUNT: usize = 500;
 
 fn main() {
 
-   let stream_count = 12;
-   
-   let mut assoc = TcpAssociation::connect("192.168.50.30:7878",stream_count).unwrap();
-   
-   let stream_count = assoc.stream_count();
-   println!("Stream count {}", stream_count);
-   
-   let mut current_stream = 0;
-   
-   for i in 0..50{
-      let file_path = format!("/3.00M-6.00M/{}.html",i);
+   let mut prefetch_service = HtmlPrefetchService::new("../benchmarking/raw_dataset");
+   prefetch_service.build_prefetch_links().unwrap();
 
-      assoc.send(file_path.as_bytes(),current_stream,1).unwrap();
+   let links = prefetch_service.get_links();
 
-      let metadata_message = assoc.receive().unwrap();
-      let mut byte_packet = BytePacket::from(metadata_message.message.as_slice());
-      let file_size = byte_packet.read_u64().unwrap() as usize;
-      let file_path = String::from_utf8_lossy(byte_packet.read_all().unwrap());
-      let mut message = String::new();
-      let mut current_size = 0;
-      let stream = metadata_message.stream;
+   let keys: Vec<&String> = links.keys().collect();
+   let key_count =  keys.len();
+
+   let mut rng = thread_rng();
+   
+   let mut requests = Vec::with_capacity(REQUEST_COUNT);
+
+   (0..REQUEST_COUNT).for_each(|_| {
+
+      let random_usize = rng.gen_range(0..key_count);
       
-      while current_size < file_size {
-
-         let message_info = assoc.receive().unwrap();
-         message.push_str(String::from_utf8_lossy(message_info.message.as_slice()).as_ref());
-         current_size += message_info.message.len();
-
-      }
-      println!("Received! {:?} {} {stream}", file_path,file_size);
-      current_stream += 1;
-      current_stream = (current_stream + 1) % stream_count;
-   }
+      let key = keys[random_usize].clone();
+      
+      requests.push(key.clone());
+      requests.extend_from_slice(links.get(&key).unwrap());
+      
+   });
+   
+   save(requests.clone(),"../benchmarking/requests/prefetch_requests.json").unwrap();
    
    
-   
+   println!("{:#?}",requests);
+   println!("Requests count: {}", requests.len());
 }

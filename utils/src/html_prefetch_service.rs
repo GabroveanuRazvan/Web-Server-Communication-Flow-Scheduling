@@ -9,93 +9,124 @@ use crate::http_parsers::extract_http_paths;
 
 
 /// Service used to build a map of html files as keys, mapped to a vector of files that are referenced in the key html file.
-pub struct HtmlPrefetchService {
+pub struct HtmlPrefetchService<T: AsRef<Path> + Clone> {
 
-    html_links: HashMap<PathBuf,Vec<PathBuf>>
+    root: T,
+    html_links: HashMap<String,Vec<String>>,
 
 }
 
-impl HtmlPrefetchService {
+impl<T: AsRef<Path> + Clone> HtmlPrefetchService<T> {
 
     /// Creates a new service.
-    pub fn new() -> Self{
+    pub fn new(root: T) -> Self{
         Self{
+            root,
             html_links: HashMap::new()
         }
     }
+    
+    fn clean_links(&mut self){
+         
+        let new_links: HashMap<String,Vec<String>> = self.html_links.iter().map(|(key, paths)| {
+            
+            let key = PathBuf::from(key);
+            let key = key.strip_prefix(&self.root).unwrap();
+            let new_key = String::from("/") + &key.display().to_string();
+            
+            let paths: Vec<String> = paths.into_iter().map(|path|{
+                let path = PathBuf::from(path);
+                let stripped_path = path.strip_prefix(&self.root).unwrap();
 
-    /// Recursively walk across the root directory and process each file.
-    /// Each html file will be parsed, and each used file path will be stored as an entry into the html_links map.
-    pub fn build_prefetch_links<T: AsRef<Path>>(&mut self, root: T) -> Result<()>{
+                let html_path = String::from("/");
+                html_path + &stripped_path.display().to_string()
+            }).collect();
 
+
+            (new_key,paths)
+            
+        }).collect();
+        
+        self.html_links = new_links;
+        
+    }
+    
+    
+    pub fn build_prefetch_links(&mut self)-> Result<()>{
+        
+        self.build_prefetch_links_helper(self.root.clone())?;
+        self.clean_links();
+        
+        Ok(())
+        
+    }
+    
+    fn build_prefetch_links_helper(&mut self,root: impl AsRef<Path>) -> Result<()> {
+    
         // Read the root directory and iterate over its files
-        let entry_it = fs::read_dir(root)?;
-
+        let entry_it = fs::read_dir(&root)?;
+        
         for entry in entry_it {
-            let path = entry?.path();
-
+            let entry_path = entry?.path();
+        
             // Recursively call the function to traverse the whole directory tree when there are more directories
-            if path.is_dir(){
-                self.build_prefetch_links(&path)?;
+            if entry_path.is_dir(){
+                self.build_prefetch_links_helper(&entry_path)?;
                 continue;
             }
-
+        
             // Check the file extension
-            if let Some(extension) = path.extension()  {
-
-                if extension == "html"{
-
-                    // Read the html file
-                    let file = OpenOptions::new()
-                        .read(true)
-                        .write(false)
-                        .create(false)
-                        .open(&path)?;
-
-                    let file_parent = path.parent().unwrap();
-
-                    let mmap = unsafe{Mmap::map(&file)?};
-                    let file_content = std::str::from_utf8(&mmap).unwrap();
-
-                    // Extract the file dependencies if they exist
-                    let dependencies = extract_http_paths(file_content);
-
-                    if dependencies.is_empty(){
-                        continue;
-                    }
-
-                    //Get the unique file paths
-                    let unique_dependencies = dependencies.iter()
-                        .map(|path| file_parent.join(path))
-                        .collect::<HashSet<PathBuf>>();
-
-                    // Get a vector of the file sizes
-                    let dependencies_sizes: Vec<u64> = unique_dependencies.iter()
-                        .filter_map(Self::get_file_size)
-                        .collect();
-
-                    // Pair the file paths with their sizes
-                    let mut paired_dependencies: Vec<_> = unique_dependencies.iter().zip(dependencies_sizes.iter()).collect();
-                    paired_dependencies.sort_by_key(|&(_path,size)| size);
-
-                    // Sort the file paths based on their sizes; also clean the paths
-                    let sorted_dependencies: Vec<_> = paired_dependencies.iter()
-                        .map(|&(path,_size)| path.clone().clean() )
-                        .collect();
-
-                    // Insert the new entry
-                    self.html_links.insert(path.clean(),sorted_dependencies);
-
-
+            if let Some(extension) = entry_path.extension()  {
+        
+                if extension != "html"{
+                    continue;
                 }
-
+        
+                // Read the html file
+                let file = OpenOptions::new()
+                    .read(true)
+                    .write(false)
+                    .create(false)
+                    .open(&entry_path)?;
+        
+                let file_parent = entry_path.parent().unwrap();
+        
+                let mmap = unsafe{Mmap::map(&file)?};
+                let file_content = std::str::from_utf8(&mmap).unwrap();
+        
+                // Extract the file dependencies if they exist
+                let dependencies = extract_http_paths(file_content);
+        
+                if dependencies.is_empty(){
+                    continue;
+                }
+        
+                //Get the unique file paths
+                let unique_dependencies: HashSet<PathBuf> = dependencies.into_iter()
+                    .map(|path| PathBuf::from(path))
+                    .collect();
+        
+                let entry_parent = entry_path.parent().unwrap();
+                let dependencies: Vec<String> = unique_dependencies.into_iter().
+                    map(|path|{
+                        let whole_path = PathBuf::from(entry_parent).join(path);
+                        let path = PathBuf::from(&whole_path).clean();
+                        path.display().to_string()
+                    }).collect();
+        
+                
+                // Insert the new entry
+                self.html_links.insert(entry_path.clean().display().to_string(), dependencies);
+        
+                
             }
-
+        
         }
-
+        
         Ok(())
     }
-
+    
+    
     /// Closure used in a filter_map() call. Returns the file size of a path if the file size can be read.
     fn get_file_size(path : impl AsRef<Path>) -> Option<u64>{
         let file = match File::open(path){
@@ -114,7 +145,7 @@ impl HtmlPrefetchService {
     }
 
     /// Consumes the service, returning the built map
-    pub fn get_links(self) -> HashMap<PathBuf, Vec<PathBuf>>{
+    pub fn get_links(self) -> HashMap<String, Vec<String>>{
         self.html_links
     }
 
