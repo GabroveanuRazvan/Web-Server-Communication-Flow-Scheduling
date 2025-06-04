@@ -2,7 +2,7 @@ use rand::{thread_rng, Rng};
 use utils::config::serialization::save;
 use utils::html_prefetch_service::HtmlPrefetchService;
 
-const REQUEST_COUNT: usize = 500;
+const REQUEST_COUNT: usize = 250;
 
 fn main() {
 
@@ -29,7 +29,7 @@ fn main() {
       
    });
    
-   save(requests.clone(),"../benchmarking/requests/prefetch_requests.json").unwrap();
+   save(requests.clone(),"../benchmarking/requests/prefetch_requests_5000.json").unwrap();
    
    
    println!("{:#?}",requests);

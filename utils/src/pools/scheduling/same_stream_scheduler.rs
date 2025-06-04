@@ -8,18 +8,17 @@ use crate::libc_wrappers::CStruct;
 use crate::packets::byte_packet::BytePacket;
 use crate::sctp::sctp_api::SctpSenderReceiveInfo;
 
-/// Round Robin scheduler for a Sctp Stream.
-pub struct RoundRobinScheduler {
+/// Same stream scheduler for a Sctp Stream.
+pub struct SameStreamScheduler {
 
     stream: Arc<SctpStream>,
     packet_size: usize,
     buffer_size: usize,
     num_workers: usize,
     worker_pool: IndexedThreadPool,
-    round_robin_counter: usize,
 }
 
-impl RoundRobinScheduler {
+impl SameStreamScheduler {
 
     /// Creates a worker pool of given size and takes a Sctp Stream.
     pub fn new(num_workers: usize, stream: SctpStream, buffer_size: usize, packet_size: usize) -> Self{
@@ -33,27 +32,22 @@ impl RoundRobinScheduler {
             buffer_size,
             num_workers,
             worker_pool,
-            round_robin_counter: 0,
         }
 
     }
 
     /// Pushes on the scheduler min-heap a new MappedFile as a job.
-    pub fn schedule_job(&mut self, job: (Mmap,String,u32)){
-
-        let job_index = self.round_robin_counter;
-        self.round_robin_counter = (self.round_robin_counter + 1) % self.num_workers;
-
+    pub fn schedule_job(&mut self, job: (Mmap,String,u32,u16)){
+        
         // Get owned metadata variables
         let chunk_size = self.packet_size - CHUNK_METADATA_SIZE;
         let stream = Arc::clone(&self.stream);
 
-        self.worker_pool.execute(job_index, move || {
+        self.worker_pool.execute(job.3 as usize, move || {
 
-            let (file_buffer,path,ppid) = job;
+            let (file_buffer,path,ppid,stream_number) = job;
             let path_bytes = &path.as_bytes()[1..];
             let file_size = file_buffer.len();
-            let stream_number = job_index as u16;
             
             // Send a metadata packet made out of file_size + file_path
             let mut metadata_packet = BytePacket::new(METADATA_STATIC_SIZE + path_bytes.len());
@@ -88,7 +82,13 @@ impl RoundRobinScheduler {
 
         loop{
 
-            let bytes_read = self.stream.read(&mut buffer,Some(&mut sender_info),None).unwrap();
+            let bytes_read = match self.stream.read(&mut buffer,Some(&mut sender_info),None){
+                Err(error) => {
+                    eprintln!("Stream Read Error: {:?}",error);
+                    break;
+                }
+                Ok(bytes_read) => bytes_read,
+            };
 
             if bytes_read == 0 {
                 break;
@@ -122,7 +122,7 @@ impl RoundRobinScheduler {
 
             let mmap = unsafe{Mmap::map(&file).unwrap()};
 
-            self.schedule_job((mmap,path,sender_info.sinfo_ppid));
+            self.schedule_job((mmap,path,sender_info.sinfo_ppid,sender_info.sinfo_stream));
 
         }
 

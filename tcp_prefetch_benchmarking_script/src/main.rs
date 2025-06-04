@@ -14,7 +14,7 @@ const USER_COUNT: usize = 6;
 const DATASET_ROOT : &str = "../benchmarking/raw_dataset";
 const REQUESTS_PATH: &str = "../benchmarking/requests/prefetch_requests.json";
 
-const PERSISTENT_CONNECTIONS: bool = false;
+const PERSISTENT_CONNECTIONS: bool = true;
 
 fn main() {
     

@@ -12,6 +12,7 @@ use crate::libc_wrappers::{SockAddrIn, safe_listen, safe_setsockopt, safe_accept
 use crate::pools::scheduling::connection_scheduler::ConnectionScheduler;
 use crate::pools::scheduling::http_one_stream_scheduler::HttpOneStreamScheduler;
 use crate::pools::scheduling::round_robin_scheduler::RoundRobinScheduler;
+use crate::pools::scheduling::same_stream_scheduler::SameStreamScheduler;
 use crate::pools::scheduling::scheduling_policy::SchedulingPolicy;
 
 #[derive(Debug)]
@@ -133,6 +134,14 @@ impl SctpServer{
                 let scheduler = HttpOneStreamScheduler::new(stream,SERVER_RECEIVE_BUFFER_SIZE,file_packet_size);
                 scheduler.start();
             },
+            
+            SchedulingPolicy::SameStream => {
+                let scheduler = SameStreamScheduler::new(self.outgoing_stream_count,
+                                                         stream,
+                                                         SERVER_RECEIVE_BUFFER_SIZE,
+                                                         file_packet_size);
+                scheduler.start();
+            }
             
             _ => panic!("Unknown scheduling policy"),
 
