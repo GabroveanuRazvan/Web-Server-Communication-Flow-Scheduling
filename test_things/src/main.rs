@@ -29,7 +29,7 @@ fn main() {
       
    });
    
-   save(requests.clone(),"../benchmarking/requests/prefetch_requests_5000.json").unwrap();
+   save(requests.clone(),"../benchmarking/requests/prefetch_requests_5_5000.json").unwrap();
    
    
    println!("{:#?}",requests);
