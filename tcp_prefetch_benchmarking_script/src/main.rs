@@ -6,52 +6,62 @@ use std::thread;
 use std::time::{Instant};
 use utils::config::serialization::load;
 use utils::constants::{KILOBYTE};
-use utils::http_parsers::parse_root;
 
 const PEER_ADDRESS: &str = "192.168.50.30:7878";
 const RECEIVE_BUFFER_SIZE: usize = 16 * KILOBYTE;
 const USER_COUNT: usize = 6;
 const DATASET_ROOT : &str = "../benchmarking/raw_dataset";
-const REQUESTS_PATH: &str = "../benchmarking/requests/prefetch_requests.json";
-
-const PERSISTENT_CONNECTIONS: bool = true;
+const REQUESTS_PATH_PREFIX: &str = "../benchmarking/requests/prefetch_requests_";
+const REQUESTS_PATH_SUFFIX: &str = "_5000.json";
+const PERSISTENT_CONNECTIONS: bool = false;
+const RUNS_COUNT: usize = 1;
 
 fn main() {
+
+    let mut results = Vec::with_capacity(RUNS_COUNT);
     
+    (0..RUNS_COUNT).into_iter().for_each(|idx| {
     
-    let requests: VecDeque<String> = load(REQUESTS_PATH).unwrap();
-    let requests = Arc::new(Mutex::new(requests));
-    let mut threads = Vec::with_capacity(USER_COUNT);
-    
-    for _ in 0..USER_COUNT{
-        let requests = Arc::clone(&requests);
-        threads.push(thread::spawn(move || {
-            
-            if PERSISTENT_CONNECTIONS{
-                persistent_connections(requests)
-            }
-            else{
-                non_persistent_connections(requests)
-            }
-            
-        }));
-    }
-    
-    let mut avg_throughput = 0.0;
-    let mut avg_time = 0.0;
-    
-    threads.into_iter().for_each(|thread| {
-        let (time,size,throughput) = thread.join().unwrap();
-        avg_throughput += throughput;
-        avg_time += time;
+        let requests_path = format!("{REQUESTS_PATH_PREFIX}{idx}{REQUESTS_PATH_SUFFIX}");
+
+        let requests: VecDeque<String> = load(requests_path).unwrap();
+        let requests = Arc::new(Mutex::new(requests));
+        let mut threads = Vec::with_capacity(USER_COUNT);
+
+        for _ in 0..USER_COUNT{
+            let requests = Arc::clone(&requests);
+            threads.push(thread::spawn(move || {
+
+                if PERSISTENT_CONNECTIONS{
+                    persistent_connections(requests)
+                }
+                else{
+                    non_persistent_connections(requests)
+                }
+
+            }));
+        }
+
+        let mut avg_throughput = 0.0;
+        let mut avg_time = 0.0;
+
+        threads.into_iter().for_each(|thread| {
+            let (time,size,throughput) = thread.join().unwrap();
+            avg_throughput += throughput;
+            avg_time += time;
+        });
+
+        avg_throughput /=  USER_COUNT as f64;
+        avg_time /= USER_COUNT as f64;
+
+        println!("Avg time: {avg_time}");
+        println!("Avg throughput: {avg_throughput}");
+        
+        results.push((avg_time,avg_throughput));
+        
     });
     
-    avg_throughput /=  USER_COUNT as f64;
-    avg_time /= USER_COUNT as f64;
-    
-    println!("Avg time: {avg_time}");
-    println!("Avg throughput: {avg_throughput}");
-    
+    println!("{:#?}",results);
     
 }
 
