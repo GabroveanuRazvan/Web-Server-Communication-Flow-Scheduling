@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 DATASET_ROOT = "../zipf_dataset"
-REQUESTS_PATH = "../requests/requests_zipf.json"
+REQUESTS_PATH = "../requests/requests_zipf_.json"
 
 REQUEST_COUNT = 5000
 
