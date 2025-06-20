@@ -14,146 +14,143 @@ use utils::sctp::sctp_client::{SctpStreamBuilder};
 const PEER_ADDRESS: &str = "192.168.50.30:7878";
 const RECEIVE_BUFFER_SIZE: usize = 16 * KILOBYTE;
 const USER_COUNT: usize = 4;
-const REQUESTS_PATH_PREFIX: &str = "../benchmarking/requests/prefetch_requests_";
-const REQUESTS_PATH_SUFFIX: &str = "_5000.json";
-const RUNS_COUNT: usize = 1;
+const REQUESTS_PATH: &str = "../benchmarking/requests/prefetch_requests_5_5000.json";
 
 
 fn main() {
+    
+    let requests: VecDeque<String> = load(REQUESTS_PATH).unwrap();
+    let requests = Arc::new(Mutex::new(requests));
 
-    let mut results = Vec::with_capacity(RUNS_COUNT);
+    let mut threads = Vec::with_capacity(USER_COUNT);
 
-    (0..RUNS_COUNT).into_iter().for_each(|idx| {
+    let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
 
-        let requests_path = format!("{REQUESTS_PATH_PREFIX}{idx}{REQUESTS_PATH_SUFFIX}");
-        
-        let requests: VecDeque<String> = load(requests_path).unwrap();
-        let requests = Arc::new(Mutex::new(requests));
+    let mut events = SctpEventSubscribe::new();
+    events.sctp_data_io_event = 1;
 
-        let mut threads = Vec::with_capacity(USER_COUNT);
+    let mut user = SctpStreamBuilder::new()
+        .socket()
+        .address(socket_address.ip().clone())
+        .port(socket_address.port())
+        .set_incoming_streams(USER_COUNT as u16)
+        .set_outgoing_streams(USER_COUNT as u16)
+        .events(events)
+        .ttl(0)
+        .build();
 
-        let socket_address: SocketAddrV4 = PEER_ADDRESS.parse().unwrap();
+    user.events();
+    user.connect();
+    
+    
+    let user = Arc::new(user);
 
-        let mut events = SctpEventSubscribe::new();
-        events.sctp_data_io_event = 1;
+    // Create the channels to communicate with the users
+    let mut worker_receivers = Vec::with_capacity(USER_COUNT);
+    let mut worker_senders = Vec::with_capacity(USER_COUNT);
 
-        let mut user = SctpStreamBuilder::new()
-            .socket()
-            .address(socket_address.ip().clone())
-            .port(socket_address.port())
-            .set_incoming_streams(USER_COUNT as u16)
-            .set_outgoing_streams(USER_COUNT as u16)
-            .events(events)
-            .ttl(0)
-            .build();
+    (0..USER_COUNT).for_each(|_| {
+        let (tx, rx) = mpsc::channel();
+        worker_senders.push(tx);
+        worker_receivers.push(rx);
+    });
 
-        user.events();
-        user.connect();
+    let receiver_user = Arc::clone(&user);
+    let receiver_thread = thread::spawn(move || {
+        let mut buffer = vec![0u8; RECEIVE_BUFFER_SIZE];
 
-        let user = Arc::new(user);
+        loop {
+            let mut sender_info = SctpSenderReceiveInfo::new();
 
-        // Create the channels to communicate with the users
-        let mut worker_receivers = Vec::with_capacity(USER_COUNT);
-        let mut worker_senders = Vec::with_capacity(USER_COUNT);
+            match receiver_user.read(&mut buffer, Some(&mut sender_info), None) {
+                Ok(0) => break,
 
-        (0..USER_COUNT).for_each(|_| {
-            let (tx, rx) = mpsc::channel();
-            worker_senders.push(tx);
-            worker_receivers.push(rx);
-        });
+                Err(err) => {
+                    eprintln!("{}", err);
+                    break;
+                }
 
-        let receiver_user = Arc::clone(&user);
-        let receiver_thread = thread::spawn(move || {
-            let mut buffer = vec![0u8; RECEIVE_BUFFER_SIZE];
-
-            loop {
-                let mut sender_info = SctpSenderReceiveInfo::new();
-
-                match receiver_user.read(&mut buffer, Some(&mut sender_info), None) {
-                    Ok(0) => break,
-
-                    Err(err) => {
-                        eprintln!("{}", err);
-                        break;
-                    }
-
-                    Ok(n) => {
-                        let stream_index = sender_info.sinfo_stream as usize;
-                        worker_senders[stream_index].send((buffer[0..n].to_vec(), sender_info.sinfo_ppid)).unwrap();
-                    }
+                Ok(n) => {
+                    let stream_index = sender_info.sinfo_stream as usize;
+                    worker_senders[stream_index].send((buffer[0..n].to_vec(), sender_info.sinfo_ppid)).unwrap();
                 }
             }
-        });
+        }
+    });
 
-        worker_receivers.into_iter().enumerate().for_each(|(idx, receiver)| {
-            let user = Arc::clone(&user);
-            let stream_number = idx as u16;
+    worker_receivers.into_iter().enumerate().for_each(|(idx, receiver)| {
+        let user = Arc::clone(&user);
+        let stream_number = idx as u16;
 
-            let mut total_size = 0;
-            let mut total_time = 0.0;
-            let requests = Arc::clone(&requests);
+        let mut total_size = 0;
+        let mut total_time = 0.0;
+        let requests = Arc::clone(&requests);
 
-            threads.push(
-                thread::spawn(move || {
-                    loop {
-                        let request = {
-                            let mut guard = requests.lock().unwrap();
+        threads.push(
+            thread::spawn(move || {
+                loop {
+                    let request = {
+                        let mut guard = requests.lock().unwrap();
 
-                            match guard.pop_back() {
-                                Some(request) => request,
-                                None => break,
-                            }
-                        };
-
-                        let start = Instant::now();
-                        user.write_all(request.as_bytes(), stream_number, 0, 0).unwrap();
-
-                        let (buffer, ppid) = receiver.recv().unwrap();
-
-                        let file_size = usize::from_be_bytes(buffer[0..8].try_into().unwrap());
-
-                        let mut current_length = 0;
-
-                        while current_length < file_size {
-                            let (buffer, ppid) = receiver.recv().unwrap();
-                            let bytes_received = buffer.len();
-                            current_length += bytes_received;
+                        match guard.pop_back() {
+                            Some(request) => request,
+                            None => break,
                         }
+                    };
 
-                        let end = start.elapsed().as_secs_f64();
+                    let start = Instant::now();
+                    user.write_all(request.as_bytes(), stream_number, 0, 0).unwrap();
 
-                        total_time += end;
-                        total_size += file_size;
+                    let (buffer, ppid) = receiver.recv().unwrap();
+
+                    let file_size = usize::from_be_bytes(buffer[0..8].try_into().unwrap());
+
+                    let mut current_length = 0;
+
+                    while current_length < file_size {
+                        let (buffer, ppid) = receiver.recv().unwrap();
+                        let bytes_received = buffer.len();
+                        current_length += bytes_received;
                     }
 
-                    let throughput = total_size as f64 / total_time;
+                    let end = start.elapsed().as_secs_f64();
 
-                    (total_time, total_size, throughput)
-                })
-            );
-        });
+                    total_time += end;
+                    total_size += file_size;
+                }
 
+                let throughput = total_size as f64 / total_time;
 
-        let mut avg_throughput = 0.0;
-        let mut avg_time = 0.0;
-
-
-        threads.into_iter().for_each(|thread| {
-            let (time, size, throughput) = thread.join().unwrap();
-            avg_throughput += throughput;
-            avg_time += time;
-        });
-
-        avg_throughput /= USER_COUNT as f64;
-        avg_time /= USER_COUNT as f64;
-
-        println!("Avg time: {avg_time}");
-        println!("Avg throughput: {avg_throughput}");
-
-        results.push((avg_time,avg_throughput));
+                (total_time, total_size, throughput)
+            })
+        );
     });
+
+
+    let mut avg_throughput = 0.0;
+    let mut avg_time = 0.0;
+    let mut global_size = 0;
     
-    println!("{:#?}",results);
+    let global_start = Instant::now();
+    
+    threads.into_iter().for_each(|thread| {
+        let (time, size, throughput) = thread.join().unwrap();
+        avg_throughput += throughput;
+        global_size += size;
+        avg_time += time;
+    });
+
+    let global_time =  global_start.elapsed().as_secs_f64();
+    
+    let mut global_throughput = global_size as f64 / global_time;
+    avg_throughput /= USER_COUNT as f64;
+    avg_time /= USER_COUNT as f64;
+
+    println!("Avg time: {avg_time}");
+    println!("Avg throughput: {avg_throughput}");
+    println!("Global time: {global_time}");
+    println!("Global throughput: {global_throughput}");
+    
 }
 
 
@@ -172,16 +169,6 @@ fn extract_content_length(buffer: &[u8]) -> Option<usize>{
     None
 
 }
-
-
-// Total test time:        1399.9743759190005
-// Average throughput:     8539839.710247297
-//
-//
-// Total test time:        1618.7891264680002
-// Average throughput:     7389004.508294408
-
-
 
 // TCP non-persistent
 // Avg time: 534.8702142852501
@@ -207,68 +194,14 @@ fn extract_content_length(buffer: &[u8]) -> Option<usize>{
 // Avg throughput: 2002461.489028103
 
 
-
-
-
-// Tcp persistent
-
-// [
-// (
-// 249.78680205175024,
-// 5552288.981161752,
-// ),
-// (
-// 236.50500676674977,
-// 5564475.525613305,
-// ),
-// (
-// 251.9222534002498,
-// 5547841.3885640325,
-// ),
-// (
-// 249.5610571387499,
-// 5515715.55129152,
-// ),
-// (
-// 249.64131678449994,
-// 5451687.080260607,
-// ),
-// (
-// 251.62677841700017,
-// 5434580.913087684,
-// ),
-// ]
-
-
-// TCP non persistent
-// [
-// (
-// 271.14068072724984,
-// 5114999.349618869,
-// ),
-// (
-// 266.25268239499974,
-// 4942831.704526664,
-// ),
-// (
-// 277.7004658617499,
-// 5032846.49342877,
-// ),
-// (
-// 280.43517022550003,
-// 4908346.063409907,
-// ),
-// (
-// 275.8002831325,
-// 4934582.493498794,
-// ),
-// (
-// 278.19011157949984,
-// 4915701.38108216,
-// ),
-// ]
-
 // SCTP
-
+ 
 // Avg time: 491.30781805674997
 // Avg throughput: 2822847.3393492326
+
+
+// Avg time: 527.8894518932498
+// Avg throughput: 2627236.695730279
+
+// Avg time: 509.79190392599963
+// Avg throughput: 1813670.6995452151

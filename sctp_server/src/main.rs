@@ -16,10 +16,7 @@ fn main() -> Result<()> {
     let incoming_streams = SctpServerConfig::max_incoming_streams();
 
     let events = SctpEventSubscribeBuilder::new().sctp_data_io_event().build();
-    let num_cpus = thread::available_parallelism().unwrap_or(NonZero::new(outgoing_streams as usize).unwrap()).get();
-
-
-
+    
     let mut server = SctpServerBuilder::new()
         .socket()
         .addresses(addresses.to_vec())
@@ -27,7 +24,7 @@ fn main() -> Result<()> {
         .max_connections(MAX_CONNECTIONS)
         .events(events)
         .root(server_root)
-        .set_outgoing_streams(num_cpus as u16)
+        .set_outgoing_streams(outgoing_streams)
         .set_incoming_streams(incoming_streams)
         .build();
 
