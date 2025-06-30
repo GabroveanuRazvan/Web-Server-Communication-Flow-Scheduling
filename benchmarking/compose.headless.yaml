@@ -10,8 +10,9 @@ services:
     tty: true
     volumes:
       - ./locust_benchmark_scripts:/locust/locust_benchmark_scripts
-      - ./benchmark_dataset:/locust/benchmark_dataset
-      - ./benchmark_raw_dataset:/locust/benchmark_raw_dataset
+      - ./dataset:/locust/dataset
+      - ./raw_dataset:/locust/raw_dataset
+      - ./zipf_dataset:/locust/zipf_dataset
       - ./results_headless:/locust/results_headless
       - ./locust_script.py:/locust/locust_script.py
       - ./requests:/locust/requests

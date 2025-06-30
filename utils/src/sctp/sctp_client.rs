@@ -1,5 +1,5 @@
 use std::io;
-use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use libc::{IPPROTO_SCTP, MSG_DONTWAIT, MSG_PEEK, SCTP_EVENTS, SCTP_INITMSG, SCTP_STATUS, SOL_SOCKET, SO_RCVBUF, SO_SNDBUF};
 use crate::libc_wrappers::{safe_close, safe_dup, safe_getsockopt, safe_recv, safe_setsockopt, CStruct, SockAddrIn, SocketBuffers};
 use crate::sctp::sctp_api::{safe_sctp_connectx, safe_sctp_recvmsg, safe_sctp_sendmsg, safe_sctp_socket, SctpEventSubscribe, SctpInitMsg, SctpPeerBuilder, SctpSenderReceiveInfo, SctpStatus};

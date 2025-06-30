@@ -1,10 +1,10 @@
 extern crate libc;
 use libc::{c_int, c_void, size_t, sockaddr_in, socklen_t, sctp_sndrcvinfo, sctp_assoc_t, socket, AF_INET, IPPROTO_SCTP, SOCK_STREAM};
-use std::{fmt, ptr, slice};
+use std::{fmt, ptr};
 use std::io::{Result};
 use std::net::{Ipv4Addr};
 use std::os::fd::RawFd;
-use crate::libc_wrappers::{safe_setsockopt, CStruct, SockAddrStorage};
+use crate::libc_wrappers::{CStruct, SockAddrStorage};
 use super::super::libc_wrappers::{wrap_result_nonnegative, SockAddrIn};
 
 /// ///////////
